@@ -142,18 +142,18 @@ html_theme = "nvidia_sphinx_theme"
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
-#html_js_files = ["custom.js"]
+# html_js_files = ["custom.js"]
 # html_css_files = ["custom.css"] # Not needed with new theme
 
 html_theme_options = {
     "collapse_navigation": False,
     "github_url": "https://github.com/ai-dynamo/dynamo",
-    #"switcher": {
-        # use for local testing
-        # "json_url": "http://localhost:8000/_static/switcher.json",
-        #"json_url": "https://docs.nvidia.com/deeplearning/dynamo/user-guide/docs/_static/switcher.json",
-        #"version_match": one_before if "dev" in version_long else version_short,
-    #},
+    # "switcher": {
+    # use for local testing
+    # "json_url": "http://localhost:8000/_static/switcher.json",
+    # "json_url": "https://docs.nvidia.com/deeplearning/dynamo/user-guide/docs/_static/switcher.json",
+    # "version_match": one_before if "dev" in version_long else version_short,
+    # },
     "navbar_start": ["navbar-logo", "version-switcher"],
     "primary_sidebar_end": [],
 }
