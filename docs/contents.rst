@@ -46,6 +46,7 @@
    :hidden:
    :caption: Examples
 
+   Hello World <Examples/hello_world.md>
    LLM Deployment <Examples/llm_deployment.md>
    Multinode <Examples/multinode.md>
 
