@@ -40,7 +40,7 @@
    Dynamo CLI Overview <guides/cli_overview.md>
    dynamo run <guides/dynamo_run.md>
    dynamo serve <guides/dynamo_serve.md>
-   dynamo deploy <guides/dynamo_deploy.md>
+   dynamo deploy <guides/dynamo_deploy/README.md>
 
 .. toctree::
    :hidden:
