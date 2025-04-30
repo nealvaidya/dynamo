@@ -83,8 +83,10 @@ class ServiceA:
 Dynamo follows a class-based architecture similar to BentoML making it intuitive for users familiar with those frameworks. Each service is defined as a Python class, with the following components:
 1. Class attributes for dependencies using `depends()`
 2. An `__init__` method for standard initialization
-3. Optional lifecycle hooks like `@async_on_start`
-4. Endpoints defined with `@dynamo_endpoint()`
+3. Optional lifecycle hooks like `@async_on_start` and `@async_on_shutdown`
+4. Endpoints defined with `@dynamo_endpoint()`. Optionally, an endpoint can be given a name
+   via `@dynamo_endpoint("my_endpoint_name")`, but otherwise will default to the name of the
+   function being decorated if omitted.
 
 This approach provides a clean separation of concerns and makes the service structure easy to understand.
 

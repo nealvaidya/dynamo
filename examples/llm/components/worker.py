@@ -17,13 +17,14 @@
 import asyncio
 import logging
 import os
+import signal
 
 from components.disagg_router import PyDisaggregatedRouter
 from components.prefill_worker import PrefillWorker
 from utils.nixl import NixlMetadataStore
 from utils.prefill_queue import PrefillQueue
 from utils.protocol import MyRequestOutput, vLLMGenerateRequest
-from utils.vllm import parse_vllm_args
+from utils.vllm import RouterType, parse_vllm_args
 from vllm.entrypoints.openai.api_server import (
     build_async_engine_client_from_engine_args,
 )
@@ -32,6 +33,7 @@ from vllm.sampling_params import RequestOutputKind
 
 from dynamo.llm import KvMetricsPublisher
 from dynamo.sdk import async_on_start, depends, dynamo_context, dynamo_endpoint, service
+from dynamo.sdk.lib.service import LeaseConfig
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +42,7 @@ logger = logging.getLogger(__name__)
     dynamo={
         "enabled": True,
         "namespace": "dynamo",
+        "custom_lease": LeaseConfig(ttl=1),  # 1 second
     },
     resources={"gpu": 1, "cpu": "10", "memory": "20Gi"},
     workers=1,
@@ -79,13 +82,21 @@ class VllmWorker:
                 logger.info("Pipeline parallel size is not supported yet, setting to 1")
                 self.engine_args.pipeline_parallel_size = 1
 
-        if self.engine_args.router == "kv":
-            VLLM_WORKER_ID = dynamo_context["endpoints"][0].lease_id()
-            os.environ["VLLM_WORKER_ID"] = str(VLLM_WORKER_ID)
+        if self.engine_args.router == RouterType.KV:
+            if not self.engine_args.enable_prefix_caching:
+                logger.info(
+                    "When using KV router, prefix caching must be enabled, setting to True"
+                )
+                self.engine_args.enable_prefix_caching = True
+
+            os.environ["VLLM_WORKER_ID"] = str(dynamo_context.get("lease").id())
             os.environ["VLLM_KV_NAMESPACE"] = "dynamo"
             os.environ["VLLM_KV_COMPONENT"] = class_name
-            logger.info(f"Generate endpoint ID: {VLLM_WORKER_ID}")
+
         self.metrics_publisher = KvMetricsPublisher()
+
+        signal.signal(signal.SIGTERM, self.shutdown_vllm_engine)
+        signal.signal(signal.SIGINT, self.shutdown_vllm_engine)
 
     @async_on_start
     async def async_init(self):
@@ -96,24 +107,22 @@ class VllmWorker:
             self.engine_client = await self._engine_context.__aenter__()
         else:
             raise RuntimeError("Failed to initialize engine client")
-        if self.engine_args.router == "kv":
-            assert self.engine_client is not None, "engine_client was not initialized"
-            self.engine_client.set_metrics_publisher(self.metrics_publisher)
-            # Initially send dummy metrics to kick start,
-            # vLLM will not update stat until forward pass is triggered
-            self.metrics_publisher.publish(
-                0,  # request_active_slots
-                1024,  # request_total_slots
-                0,  # kv_active_blocks
-                1024,  # kv_total_blocks
-                0,  # num_requests_waiting
-                0.0,  # gpu_cache_usage_perc
-                0.0,  # gpu_prefix_cache_hit_rate
-            )
-            task = asyncio.create_task(self.create_metrics_publisher_endpoint())
-            task.add_done_callback(
-                lambda _: logger.info("metrics publisher endpoint created")
-            )
+        self.engine_client.set_metrics_publisher(self.metrics_publisher)
+        # Initially send dummy metrics to kick start,
+        # vLLM will not update stat until forward pass is triggered
+        self.metrics_publisher.publish(
+            0,  # request_active_slots
+            1024,  # request_total_slots
+            0,  # kv_active_blocks
+            1024,  # kv_total_blocks
+            0,  # num_requests_waiting
+            0.0,  # gpu_cache_usage_perc
+            0.0,  # gpu_prefix_cache_hit_rate
+        )
+        task = asyncio.create_task(self.create_metrics_publisher_endpoint())
+        task.add_done_callback(
+            lambda _: logger.info("metrics publisher endpoint created")
+        )
 
         runtime = dynamo_context["runtime"]
 
@@ -129,13 +138,32 @@ class VllmWorker:
                 max_local_prefill_length=self.engine_args.max_local_prefill_length,
                 max_prefill_queue_size=self.engine_args.max_prefill_queue_size,
             )
+            await self.disaggregated_router.async_init()
         else:
             self.disaggregated_router = None
+
         logger.info("VllmWorker has been initialized")
+
+    def shutdown_vllm_engine(self, signum, frame):
+        """Shutdown the background loop"""
+        logger.info(f"Received signal {signum}, shutting down")
+        loop = asyncio.get_event_loop()
+        try:
+            self.engine_client.close()
+            logger.info("VllmWorker shutdown complete")
+        except Exception as e:
+            logger.error(f"Error during shutdown: {e}")
+        finally:
+            loop.stop()
 
     async def create_metrics_publisher_endpoint(self):
         component = dynamo_context["component"]
-        await self.metrics_publisher.create_endpoint(component)
+        lease = dynamo_context["lease"]
+        if lease is None:
+            logger.info("Creating metrics publisher endpoint with primary lease")
+        else:
+            logger.info(f"Creating metrics publisher endpoint with lease: {lease}")
+        await self.metrics_publisher.create_endpoint(component, lease)
 
     def get_remote_prefill_request_callback(self):
         # TODO: integrate prefill_queue to dynamo endpoint
@@ -148,6 +176,7 @@ class VllmWorker:
 
         return callback
 
+    # TODO: use the same child lease for metrics publisher endpoint and generate endpoint
     @dynamo_endpoint()
     async def generate(self, request: vLLMGenerateRequest):
         # TODO: consider prefix hit when deciding prefill locally or remotely
@@ -158,7 +187,7 @@ class VllmWorker:
                 stream_name=self._prefill_queue_stream_name,
             ) as prefill_queue:
                 prefill_queue_size = await prefill_queue.get_queue_size()
-            disagg_router_decision = self.disaggregated_router.prefill_remote(
+            disagg_router_decision = await self.disaggregated_router.prefill_remote(
                 len(request.engine_prompt["prompt_token_ids"]),
                 request.prefix_hit_rate,
                 prefill_queue_size,

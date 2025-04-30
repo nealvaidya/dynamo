@@ -20,6 +20,13 @@ from vllm.utils import FlexibleArgumentParser
 from dynamo.sdk.lib.config import ServiceConfig
 
 
+class RouterType:
+    RANDOM = "random"
+    ROUND_ROBIN = "round-robin"
+    KV = "kv"
+    KV_LOAD = "kv-load"
+
+
 def parse_vllm_args(service_name, prefix) -> AsyncEngineArgs:
     config = ServiceConfig.get_instance()
     vllm_args = config.as_args(service_name, prefix=prefix)
@@ -27,8 +34,13 @@ def parse_vllm_args(service_name, prefix) -> AsyncEngineArgs:
     parser.add_argument(
         "--router",
         type=str,
-        choices=["random", "round-robin", "kv"],
-        default="random",
+        choices=[
+            RouterType.RANDOM,
+            RouterType.ROUND_ROBIN,
+            RouterType.KV,
+            RouterType.KV_LOAD,
+        ],
+        default=RouterType.RANDOM,
         help="Router type to use for scheduling requests to workers",
     )
     parser.add_argument(
@@ -43,13 +55,13 @@ def parse_vllm_args(service_name, prefix) -> AsyncEngineArgs:
         "--max-local-prefill-length",
         type=int,
         default=1000,
-        help="Maximum length of local prefill",
+        help="Maximum length for local prefill. If remote prefill is enabled and the prefill length is greater than this value the request will be sent for remote prefill, otherwise prefill phase will run locally.",
     )
     parser.add_argument(
         "--max-prefill-queue-size",
         type=int,
         default=3,
-        help="Do not send remote prefill requests (prefill locally) if the queue size is greater than this value",
+        help="Maximum queue size for remote prefill. If the prefill queue size is greater than this value, prefill phase of the incoming request will be executed locally.",
     )
     parser = AsyncEngineArgs.add_cli_args(parser)
     args = parser.parse_args(vllm_args)
