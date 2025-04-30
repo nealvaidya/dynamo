@@ -235,7 +235,7 @@ if "dev" in version_long:
         {
             "name": f"{one_before} (current_release)",
             "version": f"{one_before}",
-            "url": "https://docs.nvidia.com/deeplearning/dynamo/user-guide/docs/index.html",
+            "url": "https://docs.nvidia.com/dynamo/latest/index.html",
         },
     )
 else:
@@ -244,7 +244,7 @@ else:
         {
             "name": f"{version_short} (current release)",
             "version": f"{version_short}",
-            "url": "https://docs.nvidia.com/deeplearning/dynamo/user-guide/docs/index.html",
+            "url": "https://docs.nvidia.com/dynamo/latest/index.html",
         },
     )
 
@@ -255,7 +255,7 @@ json_data.append(
     {
         "name": "older releases",
         "version": "archives",
-        "url": "https://docs.nvidia.com/deeplearning/dynamo/archives/",
+        "url": "https://docs.nvidia.com/dynamo/archives/",
     }
 )
 
