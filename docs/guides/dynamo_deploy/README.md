@@ -44,8 +44,9 @@ The manual deployment path (`deploy/Kubernetes/`) is available for users who nee
 - Provides full control over deployment parameters
 - Requires manual management of infrastructure components
 - Documentation:
-  - [Deploying Dynamo Inference Graphs to Kubernetes using Helm](../../Kubernetes/pipeline/README.md): all-in-one script
-  - [Manual Helm Deployment Guide](manual_helm_deployment.md): detailed instructions on manual deployment
+   - [Manual Helm Deployment Guide](manual_helm_deployment.md): detailed instructions on manual deployment
+   - [Deploying Dynamo Inference Graphs to Kubernetes using Helm](manual_helm_deployment.md#k8-helm-deploy): all-in-one script
+
 
 ## Getting Started
 

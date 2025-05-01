@@ -15,7 +15,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# NVIDIA Dynamo
+# NVIDIA Dynamo Quick Start Guide
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![GitHub Release](https://img.shields.io/github/v/release/ai-dynamo/dynamo)](https://github.com/ai-dynamo/dynamo/releases/latest)
@@ -33,6 +33,20 @@ NVIDIA Dynamo is a high-throughput low-latency inference framework designed for 
 
 Built in Rust for performance and in Python for extensibility, Dynamo is fully open-source and driven by a transparent, OSS (Open Source Software) first development approach.
 
+### Development Environment
+
+For a consistent development environment, you can use the provided devcontainer configuration. This requires:
+- [Docker](https://www.docker.com/products/docker-desktop)
+- [VS Code](https://code.visualstudio.com/) with the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
+
+To use the devcontainer:
+1. Open the project in VS Code
+2. Click on the button in the bottom-left corner
+3. Select "Reopen in Container"
+
+This will build and start a container with all the necessary dependencies for Dynamo development.
+
+
 ### Installation
 
 The following examples require a few system level packages.
@@ -49,19 +63,6 @@ pip install ai-dynamo[all]
 
 > [!NOTE]
 > TensorRT-LLM Support is currently available on a [branch](https://github.com/ai-dynamo/dynamo/tree/dynamo/trtllm_llmapi_v1/examples/trtllm#building-the-environment)
-
-### Development Environment
-
-For a consistent development environment, you can use the provided devcontainer configuration. This requires:
-- [Docker](https://www.docker.com/products/docker-desktop)
-- [VS Code](https://code.visualstudio.com/) with the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
-
-To use the devcontainer:
-1. Open the project in VS Code
-2. Click on the button in the bottom-left corner
-3. Select "Reopen in Container"
-
-This will build and start a container with all the necessary dependencies for Dynamo development.
 
 ### Running and Interacting with an LLM Locally
 

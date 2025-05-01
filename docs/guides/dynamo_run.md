@@ -191,7 +191,7 @@ cd target/debug
 ./dynamo-run in=none out=sglang --model-path ~/llm_models/DeepSeek-R1-Distill-Llama-70B/ --tensor-parallel-size 8 --num-nodes 2 --node-rank 1 --leader-addr 10.217.98.122:9876
 ```
 
-To pass extra arguments to the sglang engine see *Extra engine arguments* below.
+To pass extra arguments to the sglang engine see [Extra engine arguments](#extra_engine_arguments) below.
 
 ### llama_cpp
 
@@ -448,6 +448,7 @@ The output looks like this:
 
 The input defaults to `in=text`. The output will default to `mistralrs` engine. If not available whatever engine you have compiled in (so depending on `--features`).
 
+<a id="extra_engine_arguments"></a>
 ### Extra engine arguments
 
 The vllm and sglang backends support passing any argument the engine accepts.
