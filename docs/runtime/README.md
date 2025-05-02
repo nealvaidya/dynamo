@@ -23,7 +23,7 @@ limitations under the License.
 
 Rust implementation of the Dynamo runtime system, enabling distributed computing capabilities for machine learning workloads.
 
-## 🛠️ Prerequisites
+## Prerequisites
 
 ### Install Rust and Cargo using [rustup](https://rustup.rs/):
 
