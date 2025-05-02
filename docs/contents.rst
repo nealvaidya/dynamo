@@ -17,7 +17,7 @@
 .. toctree::
    :hidden:
 
-   NVIDIA Dynamo Quick Start <index.md>
+   Quick Start <index.md>
    Support Matrix <support_matrix.md>
 
 .. toctree::
