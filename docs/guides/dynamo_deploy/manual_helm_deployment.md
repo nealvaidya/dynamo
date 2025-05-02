@@ -16,7 +16,7 @@ limitations under the License.
 -->
 
 <a id="k8-helm-deploy"></a>
-# Deploying Dynamo Inference Graphs to Kubernetes using Helm 
+# Deploying Dynamo Inference Graphs to Kubernetes using Helm
 
 This guide will walk you through the process of deploying an inference graph created using the Dynamo SDK onto a Kubernetes cluster.
 
