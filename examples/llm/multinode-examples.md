@@ -1,1 +1,1 @@
-../../docs/examples/mulitnode.md
+../../docs/examples/multinode.md
