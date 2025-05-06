@@ -44,18 +44,12 @@ Dynamo operator is a Kubernetes operator that simplifies the deployment, configu
 
 ### CRD: `DynamoGraphDeployment`
 
-// ... existing code ...
-
-// ... existing code ...
 
 | Field            | Type   | Description                                                                                                                                          | Required | Default |
 |------------------|--------|------------------------------------------------------------------------------------------------------------------------------------------------------|----------|---------|
 | `dynamoComponent`| string | Reference to the dynamoComponent identifier                                                                                                          | Yes      |         |
 | `services`       | map    | Map of service names to runtime configurations. This allows the user to override the service configuration defined in the DynamoComponentDeployment. | No       |         |
 
-// ... existing code ...
-
-// ... existing code ...
 
 **API Version:** `nvidia.com/v1alpha1`  
 **Scope:** Namespaced
@@ -234,8 +228,6 @@ spec:
 
 - **Environment Variables:**  
 
-// ... existing code ...
-
 | Name                                               | Description                          | Default                                                |
 |----------------------------------------------------|--------------------------------------|--------------------------------------------------------|
 | `ADD_NAMESPACE_PREFIX_TO_IMAGE_NAME`               | Adds namespace prefix to image names | `false`                                                |
@@ -251,8 +243,6 @@ spec:
 | `API_STORE_ENDPOINT`                               | Api store service endpoint           | `http://dynamo-store`                                  |
 | `DYNAMO_IMAGE_BUILDER_NAMESPACE`                   | Namespace for image building         | `dynamo`                                               |
 | `DYNAMO_SYSTEM_NAMESPACE`                          | System namespace                     | `dynamo`                                               |
-
-// ... existing code ...
 
 - **Flags:**  
   | Flag                  | Description                                | Default |
