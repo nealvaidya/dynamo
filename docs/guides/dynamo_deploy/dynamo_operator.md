@@ -28,9 +28,9 @@ Dynamo operator is a Kubernetes operator that simplifies the deployment, configu
   Deployed as a Kubernetes `Deployment` in a specific namespace.
 
 - **Controllers:**  
-  - `DynamoDeploymentController`: Watches `DynamoDeployment` CRs and orchestrates service pipelines.
-  - `DynamoNimDeploymentController`: Watches `DynamoNimDeployment` CRs and handles individual runtime deployments.
-  - `DynamoNimRequestController`: Watches `DynamoNimRequest` CRs and manages image builds and artifact tracking.
+  - `DynamoGraphDeploymentController`: Watches `DynamoGraphDeployment` CRs and orchestrates graph deployments.
+  - `DynamoComponentDeploymentController`: Watches `DynamoComponentDeployment` CRs and handles individual component deployments.
+  - `DynamoComponentController`: Watches `DynamoComponent` CRs and manages image builds and artifact tracking.
 
 - **Workflow:**  
   1. A custom resource is created by the user or API server.
@@ -42,12 +42,20 @@ Dynamo operator is a Kubernetes operator that simplifies the deployment, configu
 
 ## Custom Resource Definitions (CRDs)
 
-### CRD: `DynamoDeployment`
+### CRD: `DynamoGraphDeployment`
 
-| Field             | Type     | Description                                           | Required | Default |
-|------------------|----------|-------------------------------------------------------|----------|---------|
-| `dynamoNim`      | string   | Reference to the dynamoNim identifier                     | Yes      |         |
-| `services`       | map      | Map of service names to runtime configurations. This allows to override the service configuration defined in the DynamoNim.        | No      |         |
+// ... existing code ...
+
+// ... existing code ...
+
+| Field            | Type   | Description                                                                                                                                          | Required | Default |
+|------------------|--------|------------------------------------------------------------------------------------------------------------------------------------------------------|----------|---------|
+| `dynamoComponent`| string | Reference to the dynamoComponent identifier                                                                                                          | Yes      |         |
+| `services`       | map    | Map of service names to runtime configurations. This allows the user to override the service configuration defined in the DynamoComponentDeployment. | No       |         |
+
+// ... existing code ...
+
+// ... existing code ...
 
 **API Version:** `nvidia.com/v1alpha1`  
 **Scope:** Namespaced
@@ -55,11 +63,11 @@ Dynamo operator is a Kubernetes operator that simplifies the deployment, configu
 #### Example
 ```yaml
 apiVersion: nvidia.com/v1alpha1
-kind: DynamoDeployment
+kind: DynamoGraphDeployment
 metadata:
   name: disagg
 spec:
-  dynamoNim: frontend:jh2o6dqzpsgfued4
+  dynamoComponent: frontend:jh2o6dqzpsgfued4
   envs:
     - name: GLOBAL_ENV_VAR
       value: some_global_value
@@ -93,28 +101,28 @@ spec:
 
 ---
 
-### CRD: `DynamoNimDeployment`
+### CRD: `DynamoComponentDeployment`
 
-| Field                   | Type     | Description                                        | Required | Default |
-|------------------------|----------|----------------------------------------------------|----------|---------|
-| `dynamoNamespace`      | string   | Namespace of the DynamoNim                  | Yes      |         |
-| `dynamoNim`            | string   | Name of the dynamoNim artifact                         | Yes      |         |
-| `dynamoTag`            | string   | FQDN of the service to run          | Yes      |         |
-| `envs`                 | array    | Environment variables for runtime                  | No       | []      |
-| `externalServices`     | map      | External service dependencies                      | No       |         |
-| `serviceName`          | string   | Logical name of the service being deployed         | Yes      |         |
-| `annotations`       | map      | Additional metadata annotations for the pod                                | No       |         |
-| `labels`            | map      | Custom labels applied to the deployment and pod                            | No       |         |
-| `resources`         | object   | Resource limits and requests (CPU, memory, GPU)                             | No       |         |
-| `autoscaling`       | object   | Autoscaling rules for the deployment                                        | No       |         |
-| `envFromSecret`     | string   | Reference to a secret for injecting env vars                                | No       |         |
-| `pvc`               | object   | Persistent volume claim configuration                                       | No       |         |
-| `ingress`           | object   | Ingress configuration for exposing the service                              | No       |         |
-| `extraPodMetadata`  | object   | Additional labels and annotations for the pod                               | No       |         |
-| `extraPodSpec`      | object   | Custom PodSpec fields to merge into the generated pod                       | No       |         |
-| `livenessProbe`     | object   | Kubernetes liveness probe                                                   | No       |         |
-| `readinessProbe`    | object   | Kubernetes readiness probe                                                  | No       |         |
-| `replicas`          | int      | Number of replicas to run                                                   | No       | 1       |
+| Field              | Type     | Description                                                   | Required | Default |
+|-------------------|----------|----------------------------------------------------------------|----------|---------|
+| `dynamoNamespace` | string   | Namespace of the DynamoComponent                               | Yes      |         |
+| `dynamoComponent` | string   | Name of the dynamoComponent artifact                           | Yes      |         |
+| `dynamoTag`       | string   | FQDN of the service to run                                     | Yes      |         |
+| `envs`            | array    | Environment variables for runtime                              | No       | `[]`    |
+| `externalServices`| map      | External service dependencies                                  | No       |         |
+| `serviceName`     | string   | Logical name of the service being deployed                     | Yes      |         |
+| `annotations`     | map      | Additional metadata annotations for the pod                    | No       |         |
+| `labels`          | map      | Custom labels applied to the deployment and pod                | No       |         |
+| `resources`       | object   | Resource limits and requests (CPU, memory, GPU)                | No       |         |
+| `autoscaling`     | object   | Autoscaling rules for the deployment                           | No       |         |
+| `envFromSecret`   | string   | Reference to a secret for injecting env vars                   | No       |         |
+| `pvc`             | object   | Persistent volume claim configuration                          | No       |         |
+| `ingress`         | object   | Ingress configuration for exposing the service                 | No       |         |
+| `extraPodMetadata`| object   | Additional labels and annotations for the pod                  | No       |         |
+| `extraPodSpec`    | object   | Custom PodSpec fields to merge into the generated pod          | No       |         |
+| `livenessProbe`   | object   | Kubernetes liveness probe                                      | No       |         |
+| `readinessProbe`  | object   | Kubernetes readiness probe                                     | No       |         |
+| `replicas`        | int      | Number of replicas to run                                      | No       | `1`     |
 
 **API Version:** `nvidia.com/v1alpha1`  
 **Scope:** Namespaced
@@ -122,12 +130,12 @@ spec:
 #### Example
 ```yaml
 apiVersion: nvidia.com/v1alpha1
-kind: DynamoNimDeployment
+kind: DynamoComponentDeployment
 metadata:
   name: test-41fa991-vllmworker
 spec:
   dynamoNamespace: dynamo
-  dynamoNim: frontend--jh2o6dqzpsgfued4
+  dynamoComponent: frontend:jh2o6dqzpsgfued4
   dynamoTag: graphs.disagg:Frontend
   envs:
     - name: DYN_DEPLOYMENT_CONFIG
@@ -150,11 +158,21 @@ spec:
 
 ---
 
-### CRD: `DynamoNimRequest`
+### CRD: `DynamoComponent`
 
-| Field       | Type   | Description                             | Required | Default |
-|-------------|--------|-----------------------------------------|----------|---------|
-| `bentoTag`  | string | Full tag of the service image to build  | Yes      |         |
+| Field                           | Type                     | Description                                                                          | Required | Default |
+|---------------------------------|--------------------------|--------------------------------------------------------------------------------------|----------|---------|
+| `dynamoComponent`               | string                   | Name of the dynamoComponent artifact                                                 | Yes      |         |
+| `image`                         | string                   | Custom container image. If not specified, an image will be built                     | No       |         |
+| `imageBuildTimeout`             | Duration                 | Timeout duration for the image building process                                      | No       |         |
+| `buildArgs`                     | []string                 | Additional arguments to pass to the container image build process                    | No       |         |
+| `imageBuilderExtraPodMetadata`  | ExtraPodMetadata         | Additional metadata to add to the image builder pod                                  | No       |         |
+| `imageBuilderExtraPodSpec`      | ExtraPodSpec             | Additional pod spec configurations for the image builder pod                         | No       |         |
+| `imageBuilderExtraContainerEnv` | []EnvVar                 | Additional environment variables for the image builder container                     | No       |         |
+| `imageBuilderContainerResources`| ResourceRequirements     | Resource requirements (CPU, memory) for the image builder container                  | No       |         |
+| `imagePullSecrets`              | []LocalObjectReference   | Secrets required for pulling private container images                                | No       |         |
+| `dockerConfigJsonSecretName`    | string                   | Name of the secret containing Docker registry credentials                            | No       |         |
+| `downloaderContainerEnvFrom`    | []EnvFromSource          | Environment variables to be sourced for the downloader container                     | No       |         |
 
 **API Version:** `nvidia.com/v1alpha1`  
 **Scope:** Namespaced
@@ -162,11 +180,11 @@ spec:
 #### Example
 ```yaml
 apiVersion: nvidia.com/v1alpha1
-kind: DynamoNimRequest
+kind: DynamoComponent
 metadata:
   name: frontend--jh2o6dqzpsgfued4
 spec:
-  bentoTag: frontend:jh2o6dqzpsgfued4
+  dynamoComponent: frontend:jh2o6dqzpsgfued4
 ```
 
 
@@ -186,23 +204,23 @@ spec:
 
 ## Reconciliation Logic
 
-### DynamoDeployment
+### DynamoGraphDeployment
 
 - **Actions:**
-  - Create a DynamoNimRequest CR to build the docker image
-  - Create a DynamoNimDeployment CR for each service defined in the DynamoNim
+  - Create a DynamoComponent CR to build the docker image
+  - Create a DynamoComponentDeployment CR for each component defined in the Dynamo graph being deployed
 - **Status Management:**
   - `.status.conditions`: Reflects readiness, failure, progress states
-  - `.status.state`: overall state of the deployment, based on the state of the DynamoNimDeployments
+  - `.status.state`: overall state of the deployment, based on the state of the DynamoComponentDeployments
 
-### DynamoNimDeployment
+### DynamoComponentDeployment
 
 - **Actions:**
   - Create a Deployment, Service, and Ingress for the service
 - **Status Management:**
   - `.status.conditions`: Reflects readiness, failure, progress states
 
-### DynamoNimRequest
+### DynamoComponent
 
 - **Actions:**
   - Create a job to build the docker image
@@ -216,41 +234,42 @@ spec:
 
 - **Environment Variables:**  
 
-| Name | Description | Default |
-|------|-------------|---------|
-| `ADD_NAMESPACE_PREFIX_TO_IMAGE_NAME` | Adds namespace prefix to image names | `false` |
-| `BENTO_IMAGE_BUILD_ENGINE` | Engine used for building images | `buildkit` |
-| `BUILDKIT_URL` | BuildKit daemon URL | `tcp://dynamo-platform-dynamo-operator-buildkitd:1234` |
-| `DOCKER_REGISTRY_BENTO_REPOSITORY_NAME` | Repository name for dynamo images | `yatai-bentos` |
-| `DOCKER_REGISTRY_IN_CLUSTER_SERVER` | In-cluster registry server address | `""` |
-| `DOCKER_REGISTRY_SECURE` | Use secure connection for registry | `true` |
-| `DOCKER_REGISTRY_SERVER` | Docker registry server address | `nvcr.io/nvidian/nim-llm-dev` |
-| `DOCKER_REGISTRY_USERNAME` | Registry authentication username | `username` |
-| `DYNAMO_INGRESS_SUFFIX` | Suffix for ingress hostnames | `dev.aire.nvidia.com` |
-| `ESTARGZ_ENABLED` | Enable eStargz image optimization | `false` |
-| `INTERNAL_IMAGES_BUILDKIT` | BuildKit image | `quay.io/bentoml/buildkit:master` |
-| `LOG_LEVEL` | Logging verbosity level | `info` |
-| `YATAI_DEPLOYMENT_NAMESPACE` | Namespace for deployments | `dynamo` |
-| `YATAI_ENDPOINT` | Yatai service endpoint | `http://dynamo-store` |
-| `YATAI_IMAGE_BUILDER_NAMESPACE` | Namespace for image building | `dynamo` |
-| `YATAI_SYSTEM_NAMESPACE` | System namespace | `dynamo` |
+// ... existing code ...
+
+| Name                                               | Description                          | Default                                                |
+|----------------------------------------------------|--------------------------------------|--------------------------------------------------------|
+| `ADD_NAMESPACE_PREFIX_TO_IMAGE_NAME`               | Adds namespace prefix to image names | `false`                                                |
+| `DYNAMO_IMAGE_BUILD_ENGINE`                        | Engine used for building images      | `buildkit`                                             |
+| `BUILDKIT_URL`                                     | BuildKit daemon URL                  | `tcp://dynamo-platform-dynamo-operator-buildkitd:1234` |
+| `DOCKER_REGISTRY_DYNAMO_COMPONENTS_REPOSITORY_NAME`| Repository name for dynamo images    | `dynamo-components`                                    |
+| `DOCKER_REGISTRY_SECURE`                           | Use secure connection for registry   | `true`                                                 |
+| `DOCKER_REGISTRY_SERVER`                           | Docker registry server address       | `nvcr.io/nvidian/dynamo`                               |
+| `DOCKER_REGISTRY_USERNAME`                         | Registry authentication username     | `username`                                             |
+| `ESTARGZ_ENABLED`                                  | Enable eStargz image optimization    | `false`                                                |
+| `INTERNAL_IMAGES_BUILDKIT`                         | BuildKit image                       | `moby/buildkit:v0.20.2`                                |
+| `LOG_LEVEL`                                        | Logging verbosity level              | `info`                                                 |
+| `API_STORE_ENDPOINT`                               | Api store service endpoint           | `http://dynamo-store`                                  |
+| `DYNAMO_IMAGE_BUILDER_NAMESPACE`                   | Namespace for image building         | `dynamo`                                               |
+| `DYNAMO_SYSTEM_NAMESPACE`                          | System namespace                     | `dynamo`                                               |
+
+// ... existing code ...
 
 - **Flags:**  
   | Flag                  | Description                                | Default |
   |-----------------------|--------------------------------------------|---------|
-  | `--natsAddr`      | Address of NATS server                   |"" |
-  | `--etcdAddr` | Address of etcd server        | "" |
+  | `--natsAddr`          | Address of NATS server                     | ""      |
+  | `--etcdAddr`          | Address of etcd server                     | ""      |
 
 
 ---
 
 ## Troubleshooting
 
-| Symptom                | Possible Cause           | Solution                          |
-|------------------------|---------------------------|-----------------------------------|
-| Resource not created   | RBAC missing              | Ensure correct ClusterRole/Binding|
-| Status not updated     | CRD schema mismatch       | Regenerate CRDs with kubebuilder  |
-| Image build hangs      | Misconfigured NimRequest  | Check image build logs            |
+| Symptom                | Possible Cause                | Solution                          |
+|------------------------|-------------------------------|-----------------------------------|
+| Resource not created   | RBAC missing                  | Ensure correct ClusterRole/Binding|
+| Status not updated     | CRD schema mismatch           | Regenerate CRDs with kubebuilder  |
+| Image build hangs      | Misconfigured DynamoComponent | Check image build logs            |
 
 ---
 
