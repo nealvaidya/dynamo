@@ -63,34 +63,34 @@ metadata:
 spec:
   dynamoComponent: frontend:jh2o6dqzpsgfued4
   envs:
-    - name: GLOBAL_ENV_VAR
-      value: some_global_value
+  - name: GLOBAL_ENV_VAR
+    value: some_global_value
   services:
     Frontend:
       replicas: 1
       envs:
-        - name: SPECIFIC_ENV_VAR
-          value: some_specific_value
+      - name: SPECIFIC_ENV_VAR
+        value: some_specific_value
     Processor:
       replicas: 1
       envs:
-        - name: SPECIFIC_ENV_VAR
-          value: some_specific_value
+      - name: SPECIFIC_ENV_VAR
+        value: some_specific_value
     VllmWorker:
       replicas: 1
       envs:
-        - name: SPECIFIC_ENV_VAR
-          value: some_specific_value
+      - name: SPECIFIC_ENV_VAR
+        value: some_specific_value
     PrefillWorker:
       replicas: 1
       envs:
-        - name: SPECIFIC_ENV_VAR
-          value: some_specific_value
+      - name: SPECIFIC_ENV_VAR
+        value: some_specific_value
     Router:
       replicas: 0
       envs:
-        - name: SPECIFIC_ENV_VAR
-          value: some_specific_value
+      - name: SPECIFIC_ENV_VAR
+        value: some_specific_value
 ```
 
 ---
@@ -98,7 +98,7 @@ spec:
 ### CRD: `DynamoComponentDeployment`
 
 | Field              | Type     | Description                                                   | Required | Default |
-|-------------------|----------|----------------------------------------------------------------|----------|---------|
+|--------------------|----------|---------------------------------------------------------------|----------|---------|
 | `dynamoNamespace` | string   | Namespace of the DynamoComponent                               | Yes      |         |
 | `dynamoComponent` | string   | Name of the dynamoComponent artifact                           | Yes      |         |
 | `dynamoTag`       | string   | FQDN of the service to run                                     | Yes      |         |
@@ -144,7 +144,7 @@ spec:
       gpu: "1"
       memory: 20Gi
     requests:
-      cpu: "10"
+      cpu: "500m"
       gpu: "1"
       memory: 20Gi
   serviceName: Frontend
