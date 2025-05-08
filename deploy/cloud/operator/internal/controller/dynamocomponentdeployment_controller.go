@@ -376,7 +376,11 @@ func (r *DynamoComponentDeploymentReconciler) Reconcile(ctx context.Context, req
 			})
 		})
 		if err != nil {
-			return
+			return ctrl.Result{}, err
+		}
+
+		if modified_ {
+			modified = true
 		}
 
 	}
@@ -864,7 +868,7 @@ func (r *DynamoComponentDeploymentReconciler) createOrUpdateOrDeleteServices(ctx
 	containsStealingTrafficDebugModeEnabled := checkIfContainsStealingTrafficDebugModeEnabled(opt.dynamoComponentDeployment)
 	// main generic service
 	modified, _, err = commonController.SyncResource(ctx, r, opt.dynamoComponentDeployment, func(ctx context.Context) (*corev1.Service, bool, error) {
-		return r.generateService(ctx, generateResourceOption{
+		return r.generateService(generateResourceOption{
 			dynamoComponentDeployment:               opt.dynamoComponentDeployment,
 			dynamoComponent:                         opt.dynamoComponent,
 			isStealingTrafficDebugModeEnabled:       false,
@@ -879,7 +883,7 @@ func (r *DynamoComponentDeploymentReconciler) createOrUpdateOrDeleteServices(ctx
 
 	// debug production service (if enabled)
 	modified_, _, err := commonController.SyncResource(ctx, r, opt.dynamoComponentDeployment, func(ctx context.Context) (*corev1.Service, bool, error) {
-		return r.generateService(ctx, generateResourceOption{
+		return r.generateService(generateResourceOption{
 			dynamoComponentDeployment:               opt.dynamoComponentDeployment,
 			dynamoComponent:                         opt.dynamoComponent,
 			isStealingTrafficDebugModeEnabled:       false,
@@ -894,7 +898,7 @@ func (r *DynamoComponentDeploymentReconciler) createOrUpdateOrDeleteServices(ctx
 	modified = modified || modified_
 	// debug service (if enabled)
 	modified_, _, err = commonController.SyncResource(ctx, r, opt.dynamoComponentDeployment, func(ctx context.Context) (*corev1.Service, bool, error) {
-		return r.generateService(ctx, generateResourceOption{
+		return r.generateService(generateResourceOption{
 			dynamoComponentDeployment:               opt.dynamoComponentDeployment,
 			dynamoComponent:                         opt.dynamoComponent,
 			isStealingTrafficDebugModeEnabled:       true,
