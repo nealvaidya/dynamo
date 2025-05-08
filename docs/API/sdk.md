@@ -1,15 +1,5 @@
 # Dynamo SDK
 
-## Table of Contents
-
-- [Introduction](#introduction)
-- [Installation](#installation)
-- [Core Concepts](#core-concepts)
-- [Writing a Service](#writing-a-service)
-- [Configuring a Service](#configuring-a-service)
-- [Deploying a Single Service](#deploying-a-single-service)
-- [Composing Services into an Graph](#composing-services-into-an-graph)
-
 ## Introduction
 
 Dynamo is a flexible and performant distributed inferencing solution for large-scale deployments. It is an ecosystem of tools, frameworks, and abstractions that makes the design, customization, and deployment of frontier-level models onto datacenter-scale infrastructure easy to reason about and optimized for your specific inferencing workloads. Dynamo's core is written in Rust and contains a set of well-defined Python bindings. Docs and examples for those can be found [here](./python_bindings.md).

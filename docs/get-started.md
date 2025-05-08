@@ -1,33 +1,22 @@
-<!--
-SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-SPDX-License-Identifier: Apache-2.0
+# Getting Started
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
 
-http://www.apache.org/licenses/LICENSE-2.0
+Development Environment
+-----------------------
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
--->
+For a consistent development environment, you can use the provided devcontainer configuration. This requires:
 
-# NVIDIA Dynamo
+* `Docker <https://www.docker.com/products/docker-desktop>`_
+* `VS Code <https://code.visualstudio.com/>`_ with the `Dev Containers extension <https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers>`_
 
-NVIDIA Dynamo is a high-throughput low-latency inference framework designed for serving generative AI and reasoning models in multi-node distributed environments. Dynamo is designed to be inference engine agnostic (supports TRT-LLM, vLLM, SGLang or others) and captures LLM-specific capabilities such as:
+To use the devcontainer:
+#. Open the project in VS Code
+#. Click on the button in the bottom-left corner
+#. Select "Reopen in Container"
 
-- **Disaggregated prefill & decode inference** – Maximizes GPU throughput and facilitates trade off between throughput and latency.
-- **Dynamic GPU scheduling** – Optimizes performance based on fluctuating demand
-- **LLM-aware request routing** – Eliminates unnecessary KV cache re-computation
-- **Accelerated data transfer** – Reduces inference response time using NIXL.
-- **KV cache offloading** – Leverages multiple memory hierarchies for higher system throughput
+This will build and start a container with all the necessary dependencies for Dynamo development.
 
-Built in Rust for performance and in Python for extensibility, Dynamo is fully open-source and driven by a transparent, OSS (Open Source Software) first development approach.
-
-### Development Environment
+## Development Environment
 
 For a consistent development environment, you can use the provided devcontainer configuration. This requires:
 - [Docker](https://www.docker.com/products/docker-desktop)
@@ -41,7 +30,7 @@ To use the devcontainer:
 This will build and start a container with all the necessary dependencies for Dynamo development.
 
 
-### Installation
+## Installation
 
 The following examples require a few system level packages.
 Recommended to use Ubuntu 24.04 with a x86_64 CPU. See [support_matrix.md](support_matrix.md)
@@ -57,7 +46,7 @@ pip install ai-dynamo[all]
 > [!NOTE]
 > To ensure compatibility, please refer to the examples in the release branch or tag that matches the version you installed.
 
-### Building the Dynamo Base Image
+## Building the Dynamo Base Image
 
 Although not needed for local development, deploying your Dynamo pipelines to Kubernetes will require you to build and push a Dynamo base image to your container registry. You can use any container registry of your choice, such as:
 - Docker Hub (docker.io)
@@ -85,13 +74,13 @@ export DYNAMO_IMAGE=<your-registry>/dynamo-base:latest-vllm
 > [!NOTE]
 > We are working on leaner base images that can be built using the targets in the top-level Earthfile.
 
-### Running and Interacting with an LLM Locally
+## Running and Interacting with an LLM Locally
 
 To run a model and interact with it locally you can call `dynamo
 run` with a hugging face model. `dynamo run` supports several backends
 including: `mistralrs`, `sglang`, `vllm`, and `tensorrtllm`.
 
-#### Example Command
+### Example Command
 
 ```
 dynamo run out=vllm deepseek-ai/DeepSeek-R1-Distill-Llama-8B
@@ -103,7 +92,7 @@ dynamo run out=vllm deepseek-ai/DeepSeek-R1-Distill-Llama-8B
 Okay, so I'm trying to figure out how to respond to the user's greeting. They said, "Hello, how are you?" and then followed it with "Hello! I'm just a program, but thanks for asking." Hmm, I need to come up with a suitable reply. ...
 ```
 
-### LLM Serving
+## LLM Serving
 
 Dynamo provides a simple way to spin up a local set of inference
 components including:
@@ -115,14 +104,14 @@ components including:
 To run a minimal configuration you can use a pre-configured
 example.
 
-#### Start Dynamo Distributed Runtime Services
+### Start Dynamo Distributed Runtime Services
 
 First start the Dynamo Distributed Runtime services:
 
 ```bash
 docker compose -f deploy/docker-compose.yml up -d
 ```
-#### Start Dynamo LLM Serving Components
+### Start Dynamo LLM Serving Components
 
 Next serve a minimal configuration with an http server, basic
 round-robin router, and a single worker.
@@ -132,7 +121,7 @@ cd examples/llm
 dynamo serve graphs.agg:Frontend -f configs/agg.yaml
 ```
 
-#### Send a Request
+### Send a Request
 
 ```bash
 curl localhost:8000/v1/chat/completions   -H "Content-Type: application/json"   -d '{
@@ -148,7 +137,7 @@ curl localhost:8000/v1/chat/completions   -H "Content-Type: application/json"   
   }' | jq
 ```
 
-### Local Development
+## Local Development
 
 If you use vscode or cursor, we have a .devcontainer folder built on [Microsofts Extension](https://code.visualstudio.com/docs/devcontainers/containers). For instructions see the [ReadMe](https://github.com/ai-dynamo/dynamo/blob/main/.devcontainer/README.md) for more details.
 
@@ -169,7 +158,7 @@ export PYTHONPATH=$PYTHONPATH:/workspace/deploy/dynamo/sdk/src:/workspace/compon
 ```
 
 
-#### Conda Environment
+### Conda Environment
 
 Alternately, you can use a conda environment
 

@@ -6,7 +6,7 @@ This guide walks you through deploying an inference graph created with the Dynam
 
 Before proceeding with deployment, ensure you have:
 
-- [Dynamo Python package](../README.md#installation) installed
+- [Dynamo Python package](../../get-started.md#installation) installed
 - A Kubernetes cluster with the [Dynamo cloud platform](dynamo_cloud.md) installed
 - Ubuntu 24.04 as the base image for your services
 - Required dependencies:
@@ -81,7 +81,7 @@ export DYNAMO_CLOUD=https://dynamo-cloud.nvidia.com  # Replace with your actual 
 
 Before building your service, you need to ensure the base image is properly set up:
 
-1. For detailed instructions on building and pushing the Dynamo base image, see the [Building the Dynamo Base Image](../../index.md#building-the-dynamo-base-image) section in the main README.
+1. For detailed instructions on building and pushing the Dynamo base image, see the [Building the Dynamo Base Image](../../get-started.md#building-the-dynamo-base-image) section in the main README.
 
 2. Export the image from the previous step to your environment.
 ```bash

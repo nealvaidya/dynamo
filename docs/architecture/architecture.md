@@ -1,5 +1,5 @@
 
-# Dynamo architecture and key features
+# High Level Architecture
 
 Dynamo is high-throughput low-latency inference framework designed for serving generative AI and reasoning models in multi-node distributed environments. Dynamo is designed to be inference engine agnostic (supports TRT-LLM, vLLM, SGLang or others) and captures LLM-specific capabilities such as
 

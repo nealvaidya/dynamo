@@ -16,10 +16,10 @@ limitations under the License.
 -->
 
 
-# KV Cache Routing in Dynamo
+# KV Cache Routing
 This documentation explains how Key-Value (KV) cache routing works in Dynamo, providing optimized inference for large language models by intelligently directing requests to workers with the most relevant cached data while simultaneously load balancing based on utilization metrics sent by the workers.
 
-## Dynamo Architecture
+## Architecture
 Dynamo's architecture consists of three key concepts:
 
 - **Namespace**: Groups related components (similar to directories in a file system). In our examples, we use the label `dynamo`. This avoids collisions between two different dynamo graphs.
@@ -30,9 +30,9 @@ A Dynamo graph is a collection of components that are linked together to form a 
 
 A common pattern is to spin up multiple of the same components which serve the same endpoints, for example, when you want to duplicate models to serve more requests. Each endpoint will get a unique identifier and you will have to tell Dynamo how to route requests between these endpoints.
 
-Colloquially, we will refer to a dynamo component that serves an endpoint for LLM inference as a **worker**.
+Colloquially, we refer to a Dynamo component that serves an endpoint for LLM inference as a **worker**.
 
-## Basic Routing in Dynamo
+## Basic Routing
 Dynamo supports several routing strategies when sending requests from one component to another component's endpoint.
 
 First, we must create a client tied to a components endpoint, we can do this using the labels defined above. Here we are getting a client tied to the `generate` endpoint of the `VllmWorker` component.
@@ -111,7 +111,7 @@ In the above image, our cost function is (KV match - Load) so we select Worker 2
 - **Worker 2 = (0.50 - 0.50) = 0**
 - Worker 3 = (0.75 - 0.80) = -0.05
 
-## Dynamo Events
+## Events
 
 In Dynamo, we want to support KV Cache Routing and load balancing for many backends that have different implementations of KV Cache and record different metrics. To that end, we built a KVPublisher that can be plugged into any framework to publish KV Events and a KvMetricsPublisher that can publish Metric Events.
 

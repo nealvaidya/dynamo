@@ -61,10 +61,6 @@ version_short_split = version_short.split(".")
 one_before = f"{version_short_split[0]}.{int(version_short_split[1]) - 1}.{version_short_split[2]}"
 
 
-# maintain left-side bar toctrees in `contents` file
-# so it doesn't show up needlessly in the index page
-master_doc = "contents"
-
 # -- General configuration ---------------------------------------------------
 
 # Add any Sphinx extension module names here, as strings. They can be
@@ -110,7 +106,7 @@ napoleon_include_special_with_doc = True
 numfig = True
 
 # final location of docs for seo/sitemap
-html_baseurl = "https://docs.nvidia.com/deeplearning/dynamo/user-guide/docs/"
+html_baseurl = "https://docs.nvidia.com/dynamo/latest/"
 
 myst_enable_extensions = [
     "dollarmath",
@@ -151,7 +147,7 @@ html_theme_options = {
     # "switcher": {
     # use for local testing
     # "json_url": "http://localhost:8000/_static/switcher.json",
-    # "json_url": "https://docs.nvidia.com/deeplearning/dynamo/user-guide/docs/_static/switcher.json",
+    # "json_url": "https://docs.nvidia.com/dynamo/latest/_static/switcher.json",
     # "version_match": one_before if "dev" in version_long else version_short,
     # },
     "navbar_start": ["navbar-logo", "version-switcher"],
@@ -226,7 +222,7 @@ for v in versions:
         {
             "name": v[0],
             "version": v[0],
-            "url": f"https://docs.nvidia.com/deeplearning/dynamo/archives/{v[1]}/user-guide/docs",
+            "url": f"https://docs.nvidia.com/dynamo/archives/{v[1]}/user-guide/docs",
         }
     )
 if "dev" in version_long:
