@@ -32,6 +32,7 @@ from dynamo.sdk.core.protocol.interface import (
     ServiceConfig,
     ServiceInterface,
 )
+from dynamo.sdk.core.runner.common import ServiceMixin
 
 T = TypeVar("T", bound=object)
 
@@ -61,7 +62,7 @@ class BentoEndpoint(DynamoEndpoint):
         return self._transports
 
 
-class BentoMLService(ServiceInterface[T]):
+class BentoMLService(ServiceMixin, ServiceInterface[T]):
     """BentoML adapter implementing the ServiceInterface"""
 
     def __init__(
