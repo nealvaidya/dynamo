@@ -4,9 +4,9 @@ Calculating LLM KV values for user requests is resource-intensive and thus expen
 
 The Dynamo KV Cache Manager feature addresses this challenge by enabling the offloading of older or less frequently accessed KV cache blocks to more cost-effective memory and storage solutions, such as CPU memory, local storage or networked object or file storage. This capability enables organizations to store up to petabytes of KV cache data at a fraction of the cost of keeping it in GPU memory. By offloading KV cache to alternative memory hierarchies, developers can free up valuable GPU resources while still retaining and reusing historical KV cache to reduce inference computation costs.
 
-![](../images/kv_cache_mgr.png)
+![Pyramid diagram showing the Dynamo Distributed KV Cache Manager offloading KV cache to cost-effective storage layers.](../images/kv_cache_mgr.png)
 
-Figure 1. Dynamo Distributed KV Cache Manager offloads less frequently accessed KV cache to more economical memory hierarchies
+**Figure 1.** Dynamo Distributed KV Cache Manager offloads less frequently accessed KV cache to more economical memory hierarchies
 
 The Dynamo KV Cache Manager uses advanced caching policies that prioritize placing frequently accessed data in GPU memory, while less accessed data is moved to shared CPU memory, SSDs, or networked object storage. It incorporates eviction policies that strike a balance between over-caching (which can introduce lookup latencies) and under-caching (which leads to missed lookups and KV cache re-computation).
 Additionally, this feature can manage KV cache across multiple GPU nodes, supporting both distributed and disaggregated inference serving, and offers hierarchical caching capabilities, creating offloading strategies at the GPU, node, and cluster levels.
@@ -39,9 +39,9 @@ The Dynamo KV Cache Manager is designed to be framework-agnostic to support vari
 
 Dynamo Distributed KV Manager has two implementations: V1 and V2. V1 serves as a proof-of-concept design, providing a lightweight KV offloading framework with simple, asynchronous APIs — GET() and PUT(), allowing inference engines to offload KV caches efficiently. These APIs are designed to be fully asynchronous, enabling seamless overlap with inference computation.
 
-![](../images/kv_cache_mgr_design.png)
+![Diagram showing runtime timelines and data movements in a KV cache management system.](../images/kv_cache_mgr_design.png)
 
-Figure 2. Design of Dynamo KV manager V1
+**Figure 2.** Design of Dynamo KV manager V1
 
 The left section of Figure 2 illustrates the execution timeline and data movement sequence in the V1 architecture. Inference engines like vLLM can initiate asynchronous operations with flexible access granularity, enabling various overlapping strategies to optimize execution based on whether the priority is throughput or latency.
 

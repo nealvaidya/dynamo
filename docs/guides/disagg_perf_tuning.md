@@ -63,7 +63,7 @@ Disaggregated router decides whether to prefill a request in the remote prefill 
 
 In the prefill engine, the best strategy is to operate at the smallest batch size that saturates the GPUs so that the average TTFT is minimized. For example, for llama3.3 70b NVFP4 quantization on B200 TP1 in vllm, the below figure shows the prefill time with different isl (prefix caching is turned off):
 
-![Prefill Time](../images/prefill_time.png)
+![Combined bar and line chart showing "Prefill Time". Bar chart represents TTFT (Time To First Token) in milliseconds against ISL (Input Sequence Length). The line chart shows TTFT/ISL (milliseconds per token) against ISL.](../images/prefill_time.png)
 
 For isl less than 1000, the prefill efficiency is low because the GPU is not fully saturated. For isl larger than 4000, the prefill time per token increases because the attention takes longer to compute with a longer history.
 

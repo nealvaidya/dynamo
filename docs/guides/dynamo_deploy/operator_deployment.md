@@ -32,7 +32,7 @@ Before proceeding with deployment, ensure you have:
 
 You must have first followed the instructions in [deploy/dynamo/helm/README.md](https://github.com/ai-dynamo/dynamo/blob/main/deploy/dynamo/helm/README.md) to install Dynamo Cloud on your Kubernetes cluster.
 
-``` {note}
+```{note}
 The `KUBE_NS` variable in the following steps must match the Kubernetes namespace where you installed Dynamo Cloud. You must also expose the `dynamo-store` service externally. This will be the endpoint the CLI uses to interface with Dynamo Cloud.
 ```
 
@@ -151,8 +151,10 @@ To remove a deployment and all its associated resources:
 ```bash
 dynamo deployment delete $DEPLOYMENT_NAME
 ```
-> [!WARNING]
-> This command will permanently delete the deployment and all associated resources. Make sure you have any necessary backups before proceeding.
+
+```{warning} 
+This command permanently deletes the deployment and all associated resources. Make sure you have any necessary backups before proceeding.
+```
 
 ### 4. Test the Deployment
 

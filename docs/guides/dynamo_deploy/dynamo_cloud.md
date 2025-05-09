@@ -29,7 +29,7 @@ The Dynamo cloud platform consists of several key components:
 
 These components work together to provide a seamless deployment experience, handling everything from containerization to scaling and monitoring.
 
-![Dynamo Deploy](../../images/dynamo-deploy.png)
+![Dynamo Deploy system deployment diagram.](../../images/dynamo-deploy.png)
 
 ## 🎯 Prerequisites
 
@@ -42,7 +42,7 @@ Before getting started with the Dynamo cloud platform, ensure you have:
 - `kubectl` configured to access your cluster
 - Helm installed (version 3.0 or later)
 
-```{admonition} Tip
+```{tip}
 Don't have a Kubernetes cluster? Check out our [Minikube setup guide](./minikube.md) to set up a local environment! 🏠
 ```
 
@@ -65,11 +65,11 @@ Where:
 - `<CONTAINER_REGISTRY>`: Your container registry (e.g., `nvcr.io`, `docker.io/<your-username>`, etc.)
 - `<TAG>`: The version tag for your images (e.g., `latest`, `0.0.1`, `v1.0.0`)
 
-> [!IMPORTANT]
-> Make sure you're logged in to your container registry before pushing images:
-> ```bash
-> docker login <CONTAINER_REGISTRY>
-> ```
+```{important}
+Make sure you're logged in to your container registry before pushing images:
+```bash
+docker login <CONTAINER_REGISTRY>
+```
 
 ### 🛠️ Building Components
 

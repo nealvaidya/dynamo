@@ -17,9 +17,8 @@
 Welcome to NVIDIA Dynamo
 ========================
 
-NVIDIA Dynamo is a high-throughput low-latency inference framework designed for serving generative AI and 
-reasoning models in multi-node distributed environments. Dynamo is designed to be inference engine agnostic 
-(supports TRT-LLM, vLLM, SGLang or others) and captures LLM-specific capabilities such as:
+The NVIDIA Dynamo Platform is a high-performance, low-latency inference platform designed to serve all AI models—across any framework, architecture, or deployment scale. 
+Dynamo is inference engine agnostic (supports TRT-LLM, vLLM, SGLang and others) and captures LLM-specific capabilities such as:
 
 * **Disaggregated prefill & decode inference** - Maximizes GPU throughput and facilitates trade off between throughput and latency.
 * **Dynamic GPU scheduling** - Optimizes performance based on fluctuating demand
@@ -63,7 +62,7 @@ a transparent, OSS (Open Source Software) first development approach.
    Writing Python Workers in Dynamo <guides/backend.md>
    Disaggregation and Performance Tuning <guides/disagg_perf_tuning.md>
    Planner <guides/planner.md>
-   Benchmark Planner <guides/planner_benchmark/benchmark_planner.md>
+   Planner Benchmark Example <guides/planner_benchmark/benchmark_planner.md>
 
 
 
