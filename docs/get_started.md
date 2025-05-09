@@ -1,21 +1,5 @@
 # Getting Started
 
-
-Development Environment
------------------------
-
-For a consistent development environment, you can use the provided devcontainer configuration. This requires:
-
-* `Docker <https://www.docker.com/products/docker-desktop>`_
-* `VS Code <https://code.visualstudio.com/>`_ with the `Dev Containers extension <https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers>`_
-
-To use the devcontainer:
-#. Open the project in VS Code
-#. Click on the button in the bottom-left corner
-#. Select "Reopen in Container"
-
-This will build and start a container with all the necessary dependencies for Dynamo development.
-
 ## Development Environment
 
 For a consistent development environment, you can use the provided devcontainer configuration. This requires:
@@ -33,7 +17,7 @@ This will build and start a container with all the necessary dependencies for Dy
 ## Installation
 
 The following examples require a few system level packages.
-Recommended to use Ubuntu 24.04 with a x86_64 CPU. See [support_matrix.md](support_matrix.md)
+Recommended to use Ubuntu 24.04 with a x86_64 CPU. See the [Support Matrix](support_matrix.md).
 
 ```
 apt-get update
@@ -181,3 +165,8 @@ docker compose -f deploy/docker-compose.yml up -d
 cd examples/llm
 dynamo serve graphs.agg:Frontend -f configs/agg.yaml
 ```
+
+
+<!--This hidden toctree includes readmes etc that aren't meant to be in the main table of contents but should be accounted for in the sphinx project structure -->
+
+```{include} hidden_toctree.rst

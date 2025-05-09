@@ -1,3 +1,20 @@
+<!--
+SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
 # Deploying Dynamo Inference Graphs to Kubernetes using the Dynamo Cloud Platform
 
 This guide walks you through deploying an inference graph created with the Dynamo SDK onto a Kubernetes cluster using the Dynamo cloud platform and the Dynamo deploy CLI. The Dynamo cloud platform provides a streamlined experience for deploying and managing your inference services.
@@ -6,7 +23,7 @@ This guide walks you through deploying an inference graph created with the Dynam
 
 Before proceeding with deployment, ensure you have:
 
-- [Dynamo Python package](../../get-started.md#installation) installed
+- [Dynamo Python package](../../get_started.md#installation) installed
 - A Kubernetes cluster with the [Dynamo cloud platform](dynamo_cloud.md) installed
 - Ubuntu 24.04 as the base image for your services
 - Required dependencies:
@@ -81,7 +98,7 @@ export DYNAMO_CLOUD=https://dynamo-cloud.nvidia.com  # Replace with your actual 
 
 Before building your service, you need to ensure the base image is properly set up:
 
-1. For detailed instructions on building and pushing the Dynamo base image, see the [Building the Dynamo Base Image](../../get-started.md#building-the-dynamo-base-image) section in the main README.
+1. For detailed instructions on building and pushing the Dynamo base image, see the [Building the Dynamo Base Image](../../get_started.md#building-the-dynamo-base-image) section in the main README.
 
 2. Export the image from the previous step to your environment.
 ```bash

@@ -115,7 +115,7 @@ Follow these steps to containerize and deploy your inference pipeline:
 1. Build and containerize the pipeline:
 
 > [!NOTE]
-> For instructions on building and pushing the Dynamo base image, see [Building the Dynamo Base Image](../../get-started.md#building-the-dynamo-base-image).
+> For instructions on building and pushing the Dynamo base image, see [Building the Dynamo Base Image](../../get_started.md#building-the-dynamo-base-image).
 
 ```bash
 # Navigate to example directory

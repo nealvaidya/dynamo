@@ -17,7 +17,7 @@ limitations under the License.
 
 # Planner
 
-The planner is a component that monitors the state of the system and makes adjustments to workers to ensure that the system is running efficiently. Currently, planner can scale up and down the number of vllm workers based on the kv cache load and prefill queue size:
+The planner monitors the state of the system and adjusts workers to ensure that the system runs efficiently. Currently, the planner can scale the number of vllm workers up and down based on the kv cache load and prefill queue size:
 * Backend:
   * local ✅
   * kubernetes ✅

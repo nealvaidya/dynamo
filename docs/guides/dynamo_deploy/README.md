@@ -45,7 +45,7 @@ The manual deployment path (`deploy/Kubernetes/`) is available for users who nee
 - Requires manual management of infrastructure components
 - Documentation:
    - [Manual Helm Deployment Guide](manual_helm_deployment.md): detailed instructions on manual deployment
-   - [Deploying Dynamo Inference Graphs to Kubernetes using Helm](manual_helm_deployment.md#Deploying Dynamo Inference Graphs to Kubernetes using Helm): all-in-one script
+   - [Deploying Dynamo Inference Graphs to Kubernetes using Helm](manual_helm_deployment.md#deploying-dynamo-inference-graphs-to-kubernetes-using-helm): all-in-one script
 
 
 ## Getting Started
@@ -60,6 +60,6 @@ The manual deployment path (`deploy/Kubernetes/`) is available for users who nee
 
 ## Example Deployment
 
-See the [Hello World example](../../examples/hello_world.md#Deploying to and Running the Example in Kubernetes) for a complete walkthrough of deploying a simple inference graph.
+See the [Hello World example](../../examples/hello_world.md#deploying-to-and-running-the-example-in-kubernetes) for a complete walkthrough of deploying a simple inference graph.
 
 See the [LLM example](../../examples/llm_deployment.md#deploy-to-kubernetes) for a complete walkthrough of deploying a production-ready LLM inference pipeline to Kubernetes.

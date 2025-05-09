@@ -33,9 +33,9 @@ a transparent, OSS (Open Source Software) first development approach.
 .. toctree::
    :hidden:
 
-   Introduction <self>
+   Welcome <self>
    Support Matrix <support_matrix.md>
-   Getting Started <get-started.md>
+   Getting Started <get_started.md>
 
 .. toctree::
    :hidden:
@@ -54,7 +54,29 @@ a transparent, OSS (Open Source Software) first development approach.
    Running Dynamo (dynamo run) <guides/dynamo_run.md>
    Serving Models (dynamo serve) <guides/dynamo_serve.md>
    Deployment (dynamo deploy) <guides/dynamo_deploy/README.md>
+
+
+.. toctree::
+   :hidden:
+   :caption: Usage Guides
+   
    Writing Python Workers in Dynamo <guides/backend.md>
+   Disaggregation and Performance Tuning <guides/disagg_perf_tuning.md>
+   Planner <guides/planner.md>
+   Benchmark Planner <guides/planner_benchmark/benchmark_planner.md>
+
+
+
+.. toctree::
+   :hidden:
+   :caption: Deployment Guides
+
+   Minikube Setup Guide <guides/dynamo_deploy/minikube.md>
+   Dynamo Cloud Kubernetes Platform <guides/dynamo_deploy/dynamo_cloud.md>
+   Deploying Dynamo Inference Graphs to Kubernetes using the Dynamo Cloud Platform <guides/dynamo_deploy/operator_deployment.md>
+   Manual Helm Deployment <guides/dynamo_deploy/manual_helm_deployment.md>
+   Dynamo Build [Experimental] <guides/dynamo_build.md>
+
 
 .. toctree::
    :hidden:
@@ -70,3 +92,7 @@ a transparent, OSS (Open Source Software) first development approach.
    Hello World Example <examples/hello_world.md>
    LLM Deployment Examples <examples/llm_deployment.md>
    Multinode Examples <examples/multinode.md>
+   LLM Deployment Examples using TensorRT-LLM <examples/trtllm.md>
+
+
+
