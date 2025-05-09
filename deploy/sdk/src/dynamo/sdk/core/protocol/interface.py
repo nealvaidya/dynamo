@@ -105,7 +105,7 @@ class ServiceInterface(Generic[T], ABC):
         """Remove unused dependencies"""
         pass
 
-    # @abstractmethod
+    @abstractmethod
     def inject_config(self) -> None:
         """Inject configuration from environment into service configs"""
         pass
@@ -117,7 +117,7 @@ class ServiceInterface(Generic[T], ABC):
         return {}
 
     # @property
-    # @abstractmethod
+    @abstractmethod
     def get_service_configs(self) -> Dict[str, ServiceConfig]:
         """Get all services"""
         return {}
