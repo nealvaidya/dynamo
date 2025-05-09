@@ -32,7 +32,11 @@ Before proceeding with deployment, ensure you have:
 
 You must have first followed the instructions in [deploy/dynamo/helm/README.md](https://github.com/ai-dynamo/dynamo/blob/main/deploy/dynamo/helm/README.md) to install Dynamo Cloud on your Kubernetes cluster.
 
-**Note**: Note the `KUBE_NS` variable in the following steps must match the Kubernetes namespace where you installed Dynamo Cloud. You must also expose the `dynamo-store` service externally. This will be the endpoint the CLI uses to interface with Dynamo Cloud.
+``` {note}
+The `KUBE_NS` variable in the following steps must match the Kubernetes namespace where you installed Dynamo Cloud. You must also expose the `dynamo-store` service externally. This will be the endpoint the CLI uses to interface with Dynamo Cloud.
+```
+
+
 ## Understanding the Deployment Process
 
 The deployment process involves two main steps:
@@ -91,8 +95,9 @@ export KUBE_NS=hello-world
 export DYNAMO_CLOUD=https://dynamo-cloud.nvidia.com  # Replace with your actual endpoint
 ```
 
-> [!NOTE]
-> The `DYNAMO_CLOUD` environment variable is required for all Dynamo deployment commands. Make sure it's set before running any deployment operations.
+``` {note}
+The `DYNAMO_CLOUD` environment variable is required for all Dynamo deployment commands. Make sure it's set before running any deployment operations.
+```
 
 ### 2. Build the Dynamo Base Image
 

@@ -27,8 +27,10 @@ source venv/bin/activate
 
 pip install ai-dynamo[all]
 ```
-> [!NOTE]
-> To ensure compatibility, please refer to the examples in the release branch or tag that matches the version you installed.
+
+```{admonition} Note
+To ensure compatibility, please refer to the examples in the release branch or tag that matches the version you installed.
+```
 
 ## Building the Dynamo Base Image
 
@@ -55,8 +57,9 @@ After building, you can use this image by setting the `DYNAMO_IMAGE` environment
 export DYNAMO_IMAGE=<your-registry>/dynamo-base:latest-vllm
 ```
 
-> [!NOTE]
-> We are working on leaner base images that can be built using the targets in the top-level Earthfile.
+``` {admonition} Note
+We're working on leaner base images that can be built using the targets in the top-level Earthfile.
+```
 
 ## Running and Interacting with an LLM Locally
 
@@ -167,6 +170,3 @@ dynamo serve graphs.agg:Frontend -f configs/agg.yaml
 ```
 
 
-<!--This hidden toctree includes readmes etc that aren't meant to be in the main table of contents but should be accounted for in the sphinx project structure -->
-
-```{include} hidden_toctree.rst
