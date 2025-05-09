@@ -14,7 +14,7 @@
 #  limitations under the License.
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -32,7 +32,9 @@ from .k8s import (
     get_dynamo_deployment,
     get_namespace,
     list_dynamo_deployments,
+    update_dynamo_deployment,
 )
+from .utils import get_deployment_status, get_urls
 
 router = APIRouter(prefix="/api/v2/deployments", tags=["deployments"])
 
@@ -130,6 +132,15 @@ async def create_deployment(deployment: CreateDeploymentSchema):
 
 @router.get("/{name}", response_model=DeploymentFullSchema)
 def get_deployment(name: str) -> DeploymentFullSchema:
+    """
+    Retrieve a deployment by name.
+
+    Args:
+        name: The name of the deployment to retrieve
+
+    Returns:
+        DeploymentFullSchema: The deployment details
+    """
     try:
         kube_namespace = get_namespace()
         cr = get_dynamo_deployment(
@@ -159,58 +170,17 @@ def get_deployment(name: str) -> DeploymentFullSchema:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def get_deployment_status(resource: Dict[str, Any]) -> str:
-    """
-    Get the current status of a deployment.
-    Maps operator status to BentoML status values.
-    Returns lowercase status values matching BentoML's DeploymentStatus enum.
-    """
-    status = resource.get("status", {})
-    conditions = status.get("conditions", [])
-    state = status.get("state", "")
-
-    # First check Ready condition
-    for condition in conditions:
-        if condition.get("type") == "Ready":
-            if condition.get("status") == "True":
-                # If state is "successful", map to "running"
-                if state == "successful":
-                    return "running"
-                return condition.get("message", "running").lower()
-            elif condition.get("message"):
-                return condition.get("message").lower()
-
-    # If no Ready condition or not True, check state
-    if state == "failed":
-        return "failed"
-    elif state == "pending":
-        return "deploying"  # map pending to deploying to match BentoML states
-
-    # Default fallback
-    return "unknown"
-
-
-def get_urls(resource: Dict[str, Any]) -> List[str]:
-    """
-    Get the URLs for a deployment.
-    Returns URLs as soon as they are available from EndpointExposed condition.
-    """
-    urls = []
-    conditions = resource.get("status", {}).get("conditions", [])
-
-    # Check for EndpointExposed condition
-    for condition in conditions:
-        if (
-            condition.get("type") == "EndpointExposed"
-            and condition.get("status") == "True"
-        ):
-            if message := condition.get("message"):
-                urls.append(message)
-    return urls
-
-
 @router.delete("/{name}", response_model=DeploymentFullSchema)
 def delete_deployment(name: str) -> DeploymentFullSchema:
+    """
+    Delete a deployment by name.
+
+    Args:
+        name: The name of the deployment to delete
+
+    Returns:
+        DeploymentFullSchema: The deleted deployment details
+    """
     try:
         kube_namespace = get_namespace()
         # Get deployment details before deletion
@@ -332,5 +302,60 @@ def list_deployments(
         raise e
     except Exception as e:
         print("Error listing deployments:")
+        print(e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/{name}", response_model=DeploymentFullSchema)
+def update_deployment(name: str, deployment: CreateDeploymentSchema):
+    """
+    Update an existing deployment.
+
+    Args:
+        name: The name of the deployment to update (path param)
+        deployment: The new deployment configuration (body)
+
+    Returns:
+        updated deployment details
+    """
+    try:
+        ownership = {"organization_id": "default-org", "user_id": "default-user"}
+        kube_namespace = get_namespace()
+        deployment_name = sanitize_deployment_name(name, deployment.bento)
+        updated_crd = update_dynamo_deployment(
+            name=deployment_name,
+            namespace=kube_namespace,
+            dynamo_nim=deployment.bento,
+            labels={
+                "ngc-organization": ownership["organization_id"],
+                "ngc-user": ownership["user_id"],
+            },
+            envs=deployment.envs,
+        )
+        resource = ResourceSchema(
+            uid=updated_crd["metadata"]["uid"],
+            name=updated_crd["metadata"]["name"],
+            created_at=updated_crd["metadata"].get(
+                "creationTimestamp", datetime.utcnow()
+            ),
+            updated_at=datetime.utcnow(),
+            resource_type="deployment",
+            labels=[],
+        )
+        creator = create_default_user()
+        cluster = create_default_cluster(creator)
+        deployment_schema = DeploymentFullSchema(
+            **resource.dict(),
+            status=get_deployment_status(updated_crd),
+            kube_namespace=kube_namespace,
+            creator=creator,
+            cluster=cluster,
+            latest_revision=None,
+            manifest=None,
+            urls=get_urls(updated_crd),
+        )
+        return deployment_schema
+    except Exception as e:
+        print("Error updating deployment:")
         print(e)
         raise HTTPException(status_code=500, detail=str(e))

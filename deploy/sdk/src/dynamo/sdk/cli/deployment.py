@@ -288,6 +288,64 @@ def list_deployments(
             sys.exit(1)
 
 
+@inject
+def update_deployment(
+    name: str,
+    config_file: Optional[TextIO] = None,
+    cluster: Optional[str] = None,
+    envs: Optional[List[str]] = None,
+    _cloud_client: BentoCloudClient = Provide[BentoMLContainer.bentocloud_client],
+) -> Deployment:
+    """Update an existing deployment on Dynamo Cloud.
+
+    Args:
+        name: The name of the deployment to update
+        config_file: Optional configuration file for the update
+        cluster: Optional cluster name
+        envs: Optional list of environment variables (KEY=VALUE)
+
+    Returns:
+        Deployment: The updated deployment object
+    """
+    # Load config from file and serialize to env
+    service_configs = resolve_service_config(config_file=config_file)
+    env_dicts = []
+    if service_configs:
+        config_json = json.dumps(service_configs)
+        logger.info(f"Deployment service configuration: {config_json}")
+        env_dicts.append({"name": "DYN_DEPLOYMENT_CONFIG", "value": config_json})
+    if envs:
+        for env in envs:
+            if "=" not in env:
+                raise CLIException(f"Invalid env format: {env}. Use KEY=VALUE.")
+            key, value = env.split("=", 1)
+            env_dicts.append({"name": key, "value": value})
+    config_params = DeploymentConfigParameters(
+        name=name,
+        envs=env_dicts,
+        cli=True,
+    )
+    try:
+        config_params.verify(create=False)
+    except BentoMLException as e:
+        print(f"Error: {str(e)}")
+        sys.exit(1)
+    with Spinner(console=console) as spinner:
+        try:
+            spinner.update(f'Updating deployment "{name}" on Dynamo Cloud...')
+            deployment = _cloud_client.deployment.update(
+                deployment_config_params=config_params
+            )
+            spinner.log(
+                f':white_check_mark: Updated deployment "{deployment.name}" in cluster "{deployment.cluster}"'
+            )
+            _display_deployment_info(spinner, deployment)
+            return deployment
+        except BentoMLException as e:
+            spinner.log(f"[red]:x: Error:[/] Failed to update deployment: {str(e)}")
+            sys.exit(1)
+
+
 @app.command()
 def create(
     ctx: typer.Context,
@@ -365,6 +423,35 @@ def list(
     """
     login_to_cloud(endpoint)
     list_deployments(cluster=cluster, search=search, dev=dev, q=query)
+
+
+@app.command()
+def update(
+    name: str = typer.Argument(..., help="Deployment name to update"),
+    config_file: Optional[typer.FileText] = typer.Option(
+        None, "--config-file", "-f", help="Configuration file path"
+    ),
+    cluster: Optional[str] = typer.Option(None, "--cluster", help="Cluster name"),
+    envs: Optional[List[str]] = typer.Option(
+        None,
+        "--env",
+        help="Environment variable(s) to set (format: KEY=VALUE). Note: These environment variables will be set on ALL services in your Dynamo pipeline.",
+    ),
+    endpoint: str = typer.Option(
+        ..., "--endpoint", "-e", help="Dynamo Cloud endpoint", envvar="DYNAMO_CLOUD"
+    ),
+) -> None:
+    """Update an existing deployment on Dynamo Cloud.
+
+    Update a deployment using parameters or a config yaml file.
+    """
+    login_to_cloud(endpoint)
+    update_deployment(
+        name=name,
+        config_file=config_file,
+        cluster=cluster,
+        envs=envs,
+    )
 
 
 @app.command()

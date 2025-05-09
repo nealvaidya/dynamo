@@ -202,3 +202,55 @@ def list_dynamo_deployments(
         return response["items"]
     except client.rest.ApiException as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def update_dynamo_deployment(
+    name: str,
+    namespace: str,
+    dynamo_nim: str,
+    labels: Dict[str, str],
+    envs: Optional[List[Dict[str, str]]] = None,
+) -> Dict[str, Any]:
+    """
+    Update a DynamoGraphDeployment custom resource.
+
+    Args:
+        name: Deployment name
+        namespace: Target namespace
+        dynamo_nim: Bento name and version (format: name:version)
+        labels: Resource labels
+        envs: Optional list of environment variables
+
+    Returns:
+        Updated deployment
+    """
+    body = {
+        "apiVersion": "nvidia.com/v1alpha1",
+        "kind": "DynamoGraphDeployment",
+        "metadata": {"name": name, "namespace": namespace, "labels": labels},
+        "spec": {
+            "dynamoGraph": dynamo_nim,
+            "services": {},
+            "envs": envs if envs else [],
+        },
+    }
+    try:
+        config.load_incluster_config()
+    except config.config_exception.ConfigException:
+        config.load_kube_config()
+
+    api = client.CustomObjectsApi()
+    try:
+        return api.replace_namespaced_custom_object(
+            group=DynamoGraphDeployment.group,
+            version=DynamoGraphDeployment.version,
+            namespace=namespace,
+            plural=DynamoGraphDeployment.plural,
+            name=name,
+            body=body,
+        )
+    except client.rest.ApiException as e:
+        if e.status == 404:
+            raise HTTPException(status_code=404, detail="Deployment not found")
+        else:
+            raise HTTPException(status_code=500, detail=str(e))
