@@ -13,6 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![cfg(feature = "block-manager")]
 // Silence warnings about deprecated features (like pyo3::IntoPy::into_py)
 #![allow(deprecated)]
 
@@ -69,12 +70,19 @@ impl BlockManager {
             .unwrap();
 
         Ok(BlockManager {
-            inner: Arc::from(dynamo_llm::block_manager::ReferenceBlockManager::new(config).unwrap()),
+            inner: Arc::from(
+                dynamo_llm::block_manager::ReferenceBlockManager::new(config).unwrap(),
+            ),
         })
     }
 
     fn allocate_blocks(&self, count: usize) -> PyResult<block_list::BlockList> {
-        let blocks = self.inner.host().unwrap().allocate_blocks_blocking(count).unwrap();
+        let blocks = self
+            .inner
+            .host()
+            .unwrap()
+            .allocate_blocks_blocking(count)
+            .unwrap();
         Ok(block_list::BlockList::from_rust(blocks))
     }
 }

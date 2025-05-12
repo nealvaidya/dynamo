@@ -13,13 +13,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![cfg(feature = "block-manager")]
 // Silence warnings about deprecated features (like pyo3::IntoPy::into_py)
 #![allow(deprecated)]
 
 use super::*;
 
-use pyo3::{Python, PyResult, types::PyList};
-use std::{sync::{Arc, Mutex}};
+use pyo3::{types::PyList, PyResult, Python};
+use std::sync::{Arc, Mutex};
 
 #[pyclass]
 pub struct BlockList {
@@ -29,7 +30,10 @@ pub struct BlockList {
 impl BlockList {
     pub fn from_rust(block_list: Vec<block::BlockType>) -> Self {
         Self {
-            inner: block_list.into_iter().map(|b| Arc::new(Mutex::new(b))).collect(),
+            inner: block_list
+                .into_iter()
+                .map(|b| Arc::new(Mutex::new(b)))
+                .collect(),
         }
     }
 }
@@ -38,7 +42,11 @@ impl BlockList {
 impl BlockList {
     fn to_list(&self) -> PyResult<Py<PyList>> {
         let py_list = Python::with_gil(|py| {
-            let blocks: Vec<block::Block> = self.inner.iter().map(|b| block::Block::from_rust(b.clone())).collect();
+            let blocks: Vec<block::Block> = self
+                .inner
+                .iter()
+                .map(|b| block::Block::from_rust(b.clone()))
+                .collect();
             PyList::new(py, blocks).unwrap().unbind()
         });
         Ok(py_list)
