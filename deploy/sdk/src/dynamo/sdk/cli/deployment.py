@@ -248,13 +248,9 @@ def update_deployment(
             spinner.log(
                 f':white_check_mark: Updated deployment "{deployment.name}" in cluster "{deployment.cluster}"'
             )
-            if wait:
-                spinner.log(
-                    "[bold blue]Waiting for deployment to be ready, you can use --no-wait to skip this process[/]"
-                )
-                retcode = deployment.wait_until_ready(timeout=timeout, spinner=spinner)
-                if retcode != 0:
-                    sys.exit(retcode)
+            spinner.log(
+                "[yellow]Update submitted. It may take a short time for the new pods to become active. Please wait a bit before accessing the deployment to ensure your changes are live.[/yellow]"
+            )
             _display_deployment_info(spinner, deployment)
             return deployment
         except BentoMLException as e:

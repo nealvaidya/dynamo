@@ -224,10 +224,21 @@ def update_dynamo_deployment(
     Returns:
         Updated deployment
     """
+    # Fetch the current resource to get resourceVersion
+    current = get_dynamo_deployment(name, namespace)
+    resource_version = current["metadata"].get("resourceVersion")
+    if not resource_version:
+        raise RuntimeError("resourceVersion not found in current resource")
+
     body = {
         "apiVersion": "nvidia.com/v1alpha1",
         "kind": "DynamoGraphDeployment",
-        "metadata": {"name": name, "namespace": namespace, "labels": labels},
+        "metadata": {
+            "name": name,
+            "namespace": namespace,
+            "labels": labels,
+            "resourceVersion": resource_version,  # Required for update
+        },
         "spec": {
             "dynamoGraph": dynamo_nim,
             "services": {},
