@@ -208,8 +208,6 @@ def create_deployment(
 def update_deployment(
     name: str,
     config_file: Optional[TextIO] = None,
-    wait: bool = True,
-    timeout: int = 3600,
     args: Optional[List[str]] = None,
     envs: Optional[List[str]] = None,
     _cloud_client: BentoCloudClient = Provide[BentoMLContainer.bentocloud_client],
@@ -219,8 +217,6 @@ def update_deployment(
     Args:
         name: The name of the deployment to update
         config_file: Optional configuration file for the update
-        wait: Whether to wait for the deployment to be ready
-        timeout: Maximum time to wait in seconds
         args: Optional extra arguments for config
         envs: Optional list of environment variables (KEY=VALUE)
 
@@ -445,12 +441,6 @@ def update(
     config_file: Optional[typer.FileText] = typer.Option(
         None, "--config-file", "-f", help="Configuration file path"
     ),
-    wait: bool = typer.Option(
-        True, "--wait/--no-wait", help="Do not wait for deployment to be ready"
-    ),
-    timeout: int = typer.Option(
-        3600, "--timeout", help="Timeout for deployment to be ready in seconds"
-    ),
     envs: Optional[List[str]] = typer.Option(
         None,
         "--env",
@@ -468,8 +458,6 @@ def update(
     update_deployment(
         name=name,
         config_file=config_file,
-        wait=wait,
-        timeout=timeout,
         envs=envs,
     )
 
