@@ -44,7 +44,7 @@ Every component in the Dynamo architecture is independently scalable and portabl
 
 ![Diagram of the NVIDIA Dynamo architecture for distributed AI inference, including User Requests, Planner, API Server, Smart Router, and Disaggregated Serving](../images/architecture.png "Dynamo Architecture")
 
-Dynamo enables dynamic worker scaling, responding to real-time deployment signals. These signals, captured and communicated through an event plane, empower the Planner to make intelligent, zero-downtime adjustments. For instance, if an increase in requests with long input sequences is detected, the Planner automatically scales up prefill workers to meet the heightened demand.
+Dynamo enables dynamic worker scaling, responding to real-time deployment signals. These signals, captured and communicated through an event plane, empower the Planner to make intelligent, zero-downtime adjustments. For instance, if Dynamo detects an increase in requests with long input sequences, the Planner automatically scales up prefill workers to meet the heightened demand.
 
 Beyond efficient event communication, data transfer across multi-node deployments is crucial at scale. To address this, Dynamo utilizes NIXL, a technology designed to expedite transfers through reduced synchronization and intelligent batching. This acceleration is particularly vital for disaggregated serving, ensuring minimal latency when prefill workers pass KV cache data to decode workers.
 
@@ -81,13 +81,13 @@ Dynamo's design enables KV cache offloading to system CPU memory, and will be ex
 
 * Tested with 100K requests to R1 using R1 Distilled Llama 70B FP8 on 2 nodes of H100s. Avg 4K ISL / 800 OSL
 
-### NIXL
+### NVIDIA Inference Transfer Library (NIXL)
 
-NIXL streamlines data transfer through simplified synchronization and batching and simplified source and destination abstractions. NIXL is able to abstract data movement across different types of memory and fast storage, whereas other data transfer libraries typically support only one tier of memory. These enhancements yield significant performance gains, accelerating both time-to-first-token (TTFT) and overall throughput.
+NIXL streamlines data transfer through simplified synchronization and batching and simplified source and destination abstractions. NIXL can abstract data movement across different types of memory and fast storage, whereas other data transfer libraries typically support a single tier of memory. These enhancements yield significant performance gains, accelerating both time-to-first-token (TTFT) and throughput.
 
-## Acknowledgement
+## Acknowledgements
 
-We would like to acknowledge several open source software stacks for motivating us to create Dynamo.
+We'd like to acknowledge several open source software stacks that motivated our creation Dynamo.
 
 - vLLM and vLLM-project
 - SGLang

@@ -19,13 +19,6 @@ limitations under the License.
 
 This guide explains how to create, configure, and deploy inference graphs for large language models using the `dynamo serve` command.
 
-## Table of Contents
-
-- [What are inference graphs?](#what-are-inference-graphs)
-- [Creating an inference graph](#creating-an-inference-graph)
-- [Serving the inference graph](#deploying-the-inference-graph)
-- [Guided Example](#guided-example)
-
 ## What are inference graphs?
 
 Inference graphs are compositions of service components that work together to handle LLM inference. A typical graph might include:

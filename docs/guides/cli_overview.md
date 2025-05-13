@@ -1,10 +1,11 @@
 # About the Dynamo Command Line Interface
 The Dynamo CLI is a powerful tool for serving, containerizing, and deploying Dynamo applications. It leverages core pieces of the BentoML deployment stack and provides a range of commands to manage your Dynamo services.
 
-At a high level, the Dynamo CLI allows you to:
+The Dynamo CLI lets you:
 - `run` - quickly chat with a model
 - `serve` - run a set of services locally (via `depends()` or `.link()`)
 - `build` - create an archive of your services (called a `bento`)
+- `deploy` - create a pipeline on Dynamo Cloud
 
 ## Commands
 
@@ -67,3 +68,29 @@ dynamo build [SERVICE]
 cd examples/hello_world
 dynamo build hello_world:Frontend
 ```
+
+### `deploy`
+
+The `deploy` commmand creates a pipeline on Dynamo Cloud using parameters at the prompt or using a YAML configuration file.
+
+**Usage**
+```bash
+dynamo deploy [PIPELINE]
+```
+
+**Arguments**
+- `pipeline` - The pipeline to deploy. Defaults to ****None*; required.
+
+**Flags**
+- `--name` or `-n` - Deployment name. Defaults to *None*; required.
+- `--config-file` or `-f` - Configuration file path. Defaults to *None*; required.
+- `--wait` - Whether or not to wait for deployment to be ready. Defaults to wait.
+  `--no-wait`
+- `--timeout` - The number of seconds that can elapse before deployment times out; measured in seconds. Defaults to 3600. 
+- `--endpoint` or `-e` - The Dynamo Cloud endpoint where the pipeline should be deployed. Defaults to *None*; required.
+- `--help` or `-h` - Display in-line help for `dynamo deploy`.
+
+
+**Example**
+
+For a detailed example, see [Operator Deployment](dynamo_deploy/operator_deployment.md).

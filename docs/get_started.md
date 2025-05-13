@@ -2,22 +2,24 @@
 
 ## Development Environment
 
-For a consistent development environment, you can use the provided devcontainer configuration. This requires:
+For a consistent development environment, use the provided devcontainer configuration. This requires:
 - [Docker](https://www.docker.com/products/docker-desktop)
 - [VS Code](https://code.visualstudio.com/) with the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
 
 To use the devcontainer:
-1. Open the project in VS Code
-2. Click on the button in the bottom-left corner
-3. Select "Reopen in Container"
+1. Open the project in VS Code.
+2. Click the button in the bottom-left corner.
+3. Select **Reopen in Container**.
 
-This will build and start a container with all the necessary dependencies for Dynamo development.
+This builds and starts a container with all the necessary dependencies for Dynamo development.
 
 
 ## Installation
 
-The following examples require a few system level packages.
-Recommended to use Ubuntu 24.04 with a x86_64 CPU. See the [Support Matrix](support_matrix.md).
+ ```{note}
+- The following examples require system level packages. 
+- We recommend Ubuntu 24.04 with a x86_64 CPU. See the [Support Matrix](support_matrix.md).
+```
 
 ```
 apt-get update
@@ -28,7 +30,7 @@ source venv/bin/activate
 pip install ai-dynamo[all]
 ```
 
-```{admonition} Note
+```{note}
 To ensure compatibility, please refer to the examples in the release branch or tag that matches the version you installed.
 ```
 
@@ -48,24 +50,18 @@ docker login <your-registry>
 docker push <your-registry>/dynamo-base:latest-vllm
 ```
 
-Notes about builds for specific frameworks:
-- For specific details on the `--framework vllm` build, see [here](examples/llm_deployment.md).
-- For specific details on the `--framework tensorrtllm` build, see [here](examples/trtllm.md).
+This documentation describes these frameworks:
+- `--framework vllm` build: see [here](examples/llm_deployment.md).
+- `--framework tensorrtllm` build: see [here](examples/trtllm.md).
 
-After building, you can use this image by setting the `DYNAMO_IMAGE` environment variable to point to your built image:
+After building, use this image by setting the `DYNAMO_IMAGE` environment variable to point to your built image:
 ```bash
 export DYNAMO_IMAGE=<your-registry>/dynamo-base:latest-vllm
 ```
 
-``` {admonition} Note
-We're working on leaner base images that can be built using the targets in the top-level Earthfile.
-```
-
 ## Running and Interacting with an LLM Locally
 
-To run a model and interact with it locally you can call `dynamo
-run` with a hugging face model. `dynamo run` supports several backends
-including: `mistralrs`, `sglang`, `vllm`, and `tensorrtllm`.
+To run a model and interact with it locally,  call `dynamo run` with a hugging face model. `dynamo run` supports several backends including: `mistralrs`, `sglang`, `vllm`, and `tensorrtllm`.
 
 ### Example Command
 
@@ -76,13 +72,14 @@ dynamo run out=vllm deepseek-ai/DeepSeek-R1-Distill-Llama-8B
 ```
 ? User › Hello, how are you?
 ✔ User · Hello, how are you?
-Okay, so I'm trying to figure out how to respond to the user's greeting. They said, "Hello, how are you?" and then followed it with "Hello! I'm just a program, but thanks for asking." Hmm, I need to come up with a suitable reply. ...
+Okay, so I'm trying to figure out how to respond to the user's greeting. 
+They said, "Hello, how are you?" and then followed it with "Hello! I'm just a program, but thanks for asking." 
+Hmm, I need to come up with a suitable reply. ...
 ```
 
 ## LLM Serving
 
-Dynamo provides a simple way to spin up a local set of inference
-components including:
+Dynamo provides a simple way to spin up a local set of inference components including:
 
 - **OpenAI Compatible Frontend** – High performance OpenAI compatible http api server written in Rust.
 - **Basic and Kv Aware Router** – Route and load balance traffic to a set of workers.

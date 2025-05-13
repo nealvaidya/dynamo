@@ -3,7 +3,7 @@
 * [Quickstart with pip and vllm](#quickstart-with-pip-and-vllm)
     * [Automatically download a model from Hugging Face](#use-model-from-hugging-face)
     * [Run a model from local file](#run-a-model-from-local-file)
-    * [Multi-node](#multi-node)
+    * [Multinode](#multinode)
 * [Compiling from Source](#compiling-from-source)
     * [Setup](#setup)
     * [Sglang](#sglang)
@@ -69,7 +69,7 @@ curl localhost:8080/v1/models
 curl -d '{"model": "Llama-3.2-3B-Instruct-Q4_K_M", "max_completion_tokens": 2049, "messages":[{"role":"user", "content": "What is the capital of South Africa?" }]}' -H 'Content-Type: application/json' http://localhost:8080/v1/chat/completions
 ```
 
-### Multi-node
+### Multinode
 
 You will need [etcd](https://etcd.io/) and [nats](https://nats.io) installed and accessible from both nodes.
 
@@ -177,7 +177,7 @@ cargo build --features sglang
 
 3. Run
 
-Any example above using `out=sglang` will work, but our sglang backend is also multi-gpu and multi-node.
+Any example above using `out=sglang` will work, but our sglang backend is also multi-gpu and multinode.
 
 **Node 1:**
 ```
@@ -238,7 +238,7 @@ Inside that virtualenv:
 ./dynamo-run in=http out=vllm ~/llm_models/Llama-3.2-3B-Instruct-Q6_K.gguf
 ```
 
-**Multi-node:**
+**Multinode:**
 **Node 1:**
 ```
 dynamo-run in=text out=vllm ~/llm_models/Llama-3.2-3B-Instruct/ --tensor-parallel-size 8 --num-nodes 2 --leader-addr 10.217.98.122:6539 --node-rank 0

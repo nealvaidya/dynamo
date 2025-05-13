@@ -28,7 +28,7 @@ Dynamo's architecture consists of three key concepts:
 
 A Dynamo graph is a collection of components that are linked together to form a graph. There are two paths through the graphs. The request path and the response path. For LLMs the request path is single-in (a single message) and the response path is many-out (streamed output).
 
-A common pattern is to spin up multiple of the same components which serve the same endpoints, for example, when you want to duplicate models to serve more requests. Each endpoint will get a unique identifier and you will have to tell Dynamo how to route requests between these endpoints.
+A common pattern is to spin up multiple of the same components that serve the same endpoints, for example, when you want to duplicate models to serve more requests. Each endpoint will get a unique identifier and you will have to tell Dynamo how to route requests between these endpoints.
 
 Colloquially, we refer to a Dynamo component that serves an endpoint for LLM inference as a **worker**.
 
@@ -169,7 +169,10 @@ Sample Output:
 	543219876: 7,
 }
 ```
-> **Note**: This example is for building understanding, it will not run outside of the context of dynamo serve. See the examples/ folder for runnable examples.
+
+```{note} 
+This example is designed to help you understand KV cache routing; it won't run outside of the context of dynamo serve. See the examples/ directory for runnable examples.
+```
 
 ### KvMetricsPublisher
 We added a KvMetrics Publisher which sends the following metrics to the KvMetricsAggregator:
@@ -217,8 +220,10 @@ Number of Requests Waiting: 1
 GPU Prefix Cache Hit Rate: 0.1
 ***
 ```
-> **Note**: This example is for building understanding, it will not run outside of the context of dynamo serve. See the examples/ folder for runnable examples.
 
+```{note} 
+This example is for building understanding, it will not run outside of the context of dynamo serve. See the examples/ folder for runnable examples.
+```
 
 ### [KV Router](https://github.com/ai-dynamo/dynamo/blob/main/examples/llm/components/kv_router.py)
 The Router component makes intelligent worker selection decisions
