@@ -28,17 +28,69 @@ WORKER_ID = 0
 NUM_LAYER = 5
 PAGE_SIZE = 4
 INNER_DIM = 13
+DTYPE = "FP16"
 HOST_NUM_BLOCKS = 16
 DEVICE_NUM_BLOCKS = 16
+DEVICE_ID = 0
 
 
-async def test_tensor_access():
-    block_manager = BlockManager(
-        WORKER_ID, NUM_LAYER, PAGE_SIZE, INNER_DIM, HOST_NUM_BLOCKS, DEVICE_NUM_BLOCKS
+async def test_block_manager_init():
+    BlockManager(WORKER_ID, NUM_LAYER, PAGE_SIZE, INNER_DIM)
+    BlockManager(WORKER_ID, NUM_LAYER, PAGE_SIZE, INNER_DIM, DTYPE)
+    BlockManager(WORKER_ID, NUM_LAYER, PAGE_SIZE, INNER_DIM, DTYPE, HOST_NUM_BLOCKS)
+    BlockManager(
+        WORKER_ID,
+        NUM_LAYER,
+        PAGE_SIZE,
+        INNER_DIM,
+        DTYPE,
+        device_num_blocks=DEVICE_NUM_BLOCKS,
     )
-    block_list = block_manager.allocate_blocks(2)
+    BlockManager(
+        WORKER_ID,
+        NUM_LAYER,
+        PAGE_SIZE,
+        INNER_DIM,
+        DTYPE,
+        HOST_NUM_BLOCKS,
+        DEVICE_NUM_BLOCKS,
+    )
+    BlockManager(
+        WORKER_ID,
+        NUM_LAYER,
+        PAGE_SIZE,
+        INNER_DIM,
+        DTYPE,
+        device_num_blocks=DEVICE_NUM_BLOCKS,
+        device_id=DEVICE_ID,
+    )
+    BlockManager(
+        WORKER_ID,
+        NUM_LAYER,
+        PAGE_SIZE,
+        INNER_DIM,
+        DTYPE,
+        HOST_NUM_BLOCKS,
+        DEVICE_NUM_BLOCKS,
+        DEVICE_ID,
+    )
+
+
+async def test_cpu_block_access():
+    block_manager = BlockManager(
+        WORKER_ID,
+        NUM_LAYER,
+        PAGE_SIZE,
+        INNER_DIM,
+        DTYPE,
+        HOST_NUM_BLOCKS,
+        DEVICE_NUM_BLOCKS,
+        DEVICE_ID,
+    )
+    block_count = 2
+    block_list = block_manager.allocate_blocks(block_count)
     py_blocks = block_list.to_list()
-    assert len(py_blocks) == 2
+    assert len(py_blocks) == block_count
     tensors = [torch.from_dlpack(b) for b in py_blocks]
     for tensor in tensors:
         assert tensor.get_device() == -1  # CPU
@@ -61,7 +113,9 @@ async def test_tensor_access():
 
 
 async def main():
-    await test_tensor_access()
+    await test_block_manager_init()
+    await test_cpu_block_access()
+    # await test_gpu_block_access()
 
 
 if __name__ == "__main__":
