@@ -14,6 +14,7 @@
 #  limitations under the License.
 
 
+from datetime import datetime
 from typing import Any, Dict, List
 
 
@@ -65,3 +66,77 @@ def get_urls(resource: Dict[str, Any]) -> List[str]:
             if message := condition.get("message"):
                 urls.append(message)
     return urls
+
+
+def build_latest_revision_from_cr(cr: dict) -> dict:
+    spec = cr.get("spec", {})
+    meta = cr.get("metadata", {})
+    now = datetime.utcnow().isoformat() + "Z"
+    bento_str = spec.get("dynamoGraph", "unknown:unknown")
+    if ":" in bento_str:
+        bento_name, bento_version = bento_str.split(":", 1)
+    else:
+        bento_name, bento_version = "unknown", "unknown"
+    # Dummy creator
+    creator = {"name": "system", "email": "", "first_name": "", "last_name": ""}
+    # Dummy repository
+    repository = {
+        "uid": "dummy-repo-uid",
+        "created_at": now,
+        "updated_at": now,
+        "deleted_at": None,
+        "name": bento_name,
+        "resource_type": "bento_repository",
+        "labels": [],
+        "description": "",
+        "latest_bento": None,
+    }
+    # Dummy bento
+    bento = {
+        "uid": "dummy-bento-uid",
+        "created_at": now,
+        "updated_at": now,
+        "deleted_at": None,
+        "name": bento_version,
+        "resource_type": "bento",
+        "labels": [],
+        "description": "",
+        "repository": repository,
+        "version": bento_version,
+        "image_build_status": "",
+        "upload_status": "",
+        "upload_finished_reason": "",
+        "presigned_upload_url": "",
+        "presigned_download_url": "",
+    }
+    # Target
+    target = {
+        "uid": "dummy-target-uid",
+        "created_at": now,
+        "updated_at": now,
+        "deleted_at": None,
+        "name": "default-target",
+        "resource_type": "deployment_target",
+        "labels": [],
+        "creator": creator,
+        "status": "running",
+        "config": {
+            "services": spec.get("services", {}),
+            "access_authorization": True,
+            "envs": spec.get("envs", []),
+        },
+        "bento": bento,
+    }
+    # Revision
+    return {
+        "uid": meta.get("uid", "dummy-uid"),
+        "created_at": meta.get("creationTimestamp", now),
+        "updated_at": meta.get("creationTimestamp", now),
+        "deleted_at": None,
+        "name": meta.get("name", "dummy-revision"),
+        "resource_type": "deployment_revision",
+        "labels": [],
+        "creator": creator,
+        "status": "running",
+        "targets": [target],
+    }

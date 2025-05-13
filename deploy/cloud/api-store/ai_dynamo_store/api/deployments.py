@@ -23,6 +23,7 @@ from ..models.schemas import (
     DeploymentFullSchema,
     DeploymentListResponse,
     ResourceSchema,
+    UpdateDeploymentSchema,
     create_default_cluster,
     create_default_user,
 )
@@ -34,7 +35,7 @@ from .k8s import (
     list_dynamo_deployments,
     update_dynamo_deployment,
 )
-from .utils import get_deployment_status, get_urls
+from .utils import build_latest_revision_from_cr, get_deployment_status, get_urls
 
 router = APIRouter(prefix="/api/v2/deployments", tags=["deployments"])
 
@@ -118,7 +119,7 @@ async def create_deployment(deployment: CreateDeploymentSchema):
             kube_namespace=kube_namespace,
             creator=creator,
             cluster=cluster,
-            latest_revision=None,
+            latest_revision=build_latest_revision_from_cr(created_crd),
             manifest=None,
         )
 
@@ -158,7 +159,7 @@ def get_deployment(name: str) -> DeploymentFullSchema:
             urls=get_urls(cr),
             creator=create_default_user(),
             cluster=create_default_cluster(create_default_user()),
-            latest_revision=None,
+            latest_revision=build_latest_revision_from_cr(cr),
             manifest=None,
         )
         return deployment_schema
@@ -196,7 +197,7 @@ def delete_deployment(name: str) -> DeploymentFullSchema:
             urls=get_urls(cr),
             creator=create_default_user(),
             cluster=create_default_cluster(create_default_user()),
-            latest_revision=None,
+            latest_revision=build_latest_revision_from_cr(cr),
             manifest=None,
         )
         # Delete the deployment
@@ -265,7 +266,7 @@ def list_deployments(
                 urls=get_urls(cr),
                 creator=create_default_user(),
                 cluster=create_default_cluster(create_default_user()),
-                latest_revision=None,
+                latest_revision=build_latest_revision_from_cr(cr),
                 manifest=None,
             )
 
@@ -307,7 +308,7 @@ def list_deployments(
 
 
 @router.put("/{name}", response_model=DeploymentFullSchema)
-def update_deployment(name: str, deployment: CreateDeploymentSchema):
+def update_deployment(name: str, deployment: UpdateDeploymentSchema):
     """
     Update an existing deployment.
 
@@ -350,7 +351,7 @@ def update_deployment(name: str, deployment: CreateDeploymentSchema):
             kube_namespace=kube_namespace,
             creator=creator,
             cluster=cluster,
-            latest_revision=None,
+            latest_revision=build_latest_revision_from_cr(updated_crd),
             manifest=None,
             urls=get_urls(updated_crd),
         )
