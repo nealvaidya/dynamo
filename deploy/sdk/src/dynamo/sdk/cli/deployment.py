@@ -411,8 +411,8 @@ def get(
     get_deployment(name, cluster=cluster)
 
 
-@app.command()
-def list(
+@app.command("list")
+def list_deployments_command(
     cluster: Optional[str] = typer.Option(None, "--cluster", help="Cluster name"),
     search: Optional[str] = typer.Option(None, "--search", help="Search query"),
     dev: bool = typer.Option(False, "--dev", help="List development deployments"),
