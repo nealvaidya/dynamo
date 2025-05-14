@@ -255,8 +255,7 @@ func GetDynamoGraphConfig(ctx context.Context, dynamoDeployment *v1alpha1.Dynamo
 	return ParseDynamoGraphConfig(ctx, yamlContent)
 }
 
-// _setLwsAnnotations is a helper function to set LWS related annotations
-func _setLwsAnnotations(serviceConfig Config, deployment *v1alpha1.DynamoComponentDeployment) error {
+func setLwsAnnotations(serviceConfig Config, deployment *v1alpha1.DynamoComponentDeployment) error {
 	if serviceConfig.Resources != nil &&
 		serviceConfig.Resources.GPU != nil && *serviceConfig.Resources.GPU != "" && *serviceConfig.Resources.GPU != "0" &&
 		serviceConfig.GpusPerNode != nil && *serviceConfig.GpusPerNode > 0 {
@@ -351,7 +350,7 @@ func GenerateDynamoComponentsDeployments(ctx context.Context, parentDynamoGraphD
 				deployment.Spec.Resources.Limits.GPU = *service.Config.Resources.GPU
 			}
 
-			if err := _setLwsAnnotations(service.Config, deployment); err != nil {
+			if err := setLwsAnnotations(service.Config, deployment); err != nil {
 				return nil, err
 			}
 		}
