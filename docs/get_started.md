@@ -17,7 +17,7 @@ This builds and starts a container with all the necessary dependencies for Dynam
 ## Installation
 
  ```{note}
-- The following examples require system level packages. 
+- The following examples require system level packages.
 - We recommend Ubuntu 24.04 with a x86_64 CPU. See the [Support Matrix](support_matrix.md).
 ```
 
@@ -72,8 +72,8 @@ dynamo run out=vllm deepseek-ai/DeepSeek-R1-Distill-Llama-8B
 ```
 ? User › Hello, how are you?
 ✔ User · Hello, how are you?
-Okay, so I'm trying to figure out how to respond to the user's greeting. 
-They said, "Hello, how are you?" and then followed it with "Hello! I'm just a program, but thanks for asking." 
+Okay, so I'm trying to figure out how to respond to the user's greeting.
+They said, "Hello, how are you?" and then followed it with "Hello! I'm just a program, but thanks for asking."
 Hmm, I need to come up with a suitable reply. ...
 ```
 

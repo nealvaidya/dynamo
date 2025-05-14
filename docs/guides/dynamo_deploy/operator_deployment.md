@@ -147,7 +147,7 @@ To remove a deployment and all its associated resources:
 dynamo deployment delete $DEPLOYMENT_NAME
 ```
 
-```{warning} 
+```{warning}
 This command permanently deletes the deployment and all associated resources. Make sure you have any necessary backups before proceeding.
 ```
 

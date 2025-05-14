@@ -170,7 +170,7 @@ Sample Output:
 }
 ```
 
-```{note} 
+```{note}
 This example is designed to help you understand KV cache routing; it won't run outside of the context of dynamo serve. See the examples/ directory for runnable examples.
 ```
 
@@ -221,7 +221,7 @@ GPU Prefix Cache Hit Rate: 0.1
 ***
 ```
 
-```{note} 
+```{note}
 This example is for building understanding, it will not run outside of the context of dynamo serve. See the examples/ folder for runnable examples.
 ```
 
