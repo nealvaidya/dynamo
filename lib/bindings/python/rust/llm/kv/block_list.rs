@@ -25,15 +25,24 @@ use std::sync::{Arc, Mutex};
 #[pyclass]
 pub struct BlockList {
     inner: Vec<Arc<Mutex<block::BlockType>>>,
+    // TODO: Metadata should be stored in the block manager?
+    dtype: dynamo_llm::common::dtype::DType,
+    device_id: usize,
 }
 
 impl BlockList {
-    pub fn from_rust(block_list: Vec<block::BlockType>) -> Self {
+    pub fn from_rust(
+        block_list: Vec<block::BlockType>,
+        dtype: dynamo_llm::common::dtype::DType,
+        device_id: usize,
+    ) -> Self {
         Self {
             inner: block_list
                 .into_iter()
                 .map(|b| Arc::new(Mutex::new(b)))
                 .collect(),
+            dtype: dtype,
+            device_id: device_id,
         }
     }
 }
@@ -45,7 +54,7 @@ impl BlockList {
             let blocks: Vec<block::Block> = self
                 .inner
                 .iter()
-                .map(|b| block::Block::from_rust(b.clone()))
+                .map(|b| block::Block::from_rust(b.clone(), self.dtype.clone(), self.device_id))
                 .collect();
             PyList::new(py, blocks).unwrap().unbind()
         });

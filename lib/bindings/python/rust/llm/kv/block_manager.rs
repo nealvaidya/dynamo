@@ -23,6 +23,9 @@ use pyo3::PyResult;
 #[pyclass]
 pub struct BlockManager {
     inner: Arc<dynamo_llm::block_manager::ReferenceBlockManager>,
+    // TODO: Metadata should be stored in the block manager?
+    dtype: dynamo_llm::common::dtype::DType,
+    device_id: usize,
 }
 
 #[pymethods]
@@ -49,8 +52,9 @@ impl BlockManager {
             .num_layers(num_layer)
             .page_size(page_size)
             .inner_dim(inner_dim);
+        let mut dtype_ = dynamo_llm::common::dtype::DType::FP16; // Default in block_manager config
         if let Some(dtype_str) = dtype {
-            let dtype = match dtype_str.as_str() {
+            dtype_ = match dtype_str.as_str() {
                 "fp8" | "FP8" => dynamo_llm::common::dtype::DType::FP8,
                 "fp16" | "FP16" => dynamo_llm::common::dtype::DType::FP16,
                 "bf16" | "BF16" => dynamo_llm::common::dtype::DType::BF16,
@@ -70,17 +74,14 @@ impl BlockManager {
                     )))
                 }
             };
-            model_config = model_config.dtype(dtype);
         }
+        model_config = model_config.dtype(dtype_.clone());
         config = config.model(model_config.build().unwrap());
         if let Some(host_num_blocks) = host_num_blocks {
             config = config.host_layout(
                 dynamo_llm::block_manager::KvManagerLayoutConfig::builder()
                     .num_blocks(host_num_blocks)
-                    .allocator(
-                        dynamo_llm::block_manager::storage::DeviceAllocator::new(device_id)
-                            .unwrap(),
-                    )
+                    .allocator(dynamo_llm::block_manager::storage::PinnedAllocator::new().unwrap())
                     .build()
                     .unwrap(),
             );
@@ -89,7 +90,10 @@ impl BlockManager {
             config = config.device_layout(
                 dynamo_llm::block_manager::KvManagerLayoutConfig::builder()
                     .num_blocks(device_num_blocks)
-                    .allocator(dynamo_llm::block_manager::storage::DeviceAllocator::new(device_id).unwrap())
+                    .allocator(
+                        dynamo_llm::block_manager::storage::DeviceAllocator::new(device_id)
+                            .unwrap(),
+                    )
                     .build()
                     .unwrap(),
             );
@@ -99,16 +103,46 @@ impl BlockManager {
             inner: Arc::from(
                 dynamo_llm::block_manager::ReferenceBlockManager::new(config).unwrap(),
             ),
+            dtype: dtype_,
+            device_id: device_id,
         })
     }
 
-    fn allocate_blocks(&self, count: usize) -> PyResult<block_list::BlockList> {
+    fn allocate_host_blocks_blocking(&self, count: usize) -> PyResult<block_list::BlockList> {
         let blocks = self
             .inner
             .host()
             .unwrap()
             .allocate_blocks_blocking(count)
             .unwrap();
-        Ok(block_list::BlockList::from_rust(blocks))
+        // Wrap each block in an enum accounting for Pinned & Device block
+        let blocks = blocks
+            .into_iter()
+            .map(|b| block::BlockType::Pinned(b))
+            .collect();
+        Ok(block_list::BlockList::from_rust(
+            blocks,
+            self.dtype.clone(),
+            self.device_id,
+        ))
+    }
+
+    fn allocate_device_blocks_blocking(&self, count: usize) -> PyResult<block_list::BlockList> {
+        let blocks = self
+            .inner
+            .device()
+            .unwrap()
+            .allocate_blocks_blocking(count)
+            .unwrap();
+        // Wrap each block in an enum accounting for Pinned & Device block
+        let blocks = blocks
+            .into_iter()
+            .map(|b| block::BlockType::Device(b))
+            .collect();
+        Ok(block_list::BlockList::from_rust(
+            blocks,
+            self.dtype.clone(),
+            self.device_id,
+        ))
     }
 }

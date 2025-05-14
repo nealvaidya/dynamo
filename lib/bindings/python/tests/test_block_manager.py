@@ -88,7 +88,7 @@ async def test_cpu_block_access():
         DEVICE_ID,
     )
     block_count = 2
-    block_list = block_manager.allocate_blocks(block_count)
+    block_list = block_manager.allocate_host_blocks_blocking(block_count)
     py_blocks = block_list.to_list()
     assert len(py_blocks) == block_count
     tensors = [torch.from_dlpack(b) for b in py_blocks]
@@ -112,10 +112,47 @@ async def test_cpu_block_access():
         assert torch.allclose(tensor, tensor_)
 
 
+async def test_gpu_block_access():
+    block_manager = BlockManager(
+        WORKER_ID,
+        NUM_LAYER,
+        PAGE_SIZE,
+        INNER_DIM,
+        DTYPE,
+        HOST_NUM_BLOCKS,
+        DEVICE_NUM_BLOCKS,
+        DEVICE_ID,
+    )
+    # TODO: Has issue with block_count > 1, need to check the shape of the tensor
+    block_count = 1
+    block_list = block_manager.allocate_device_blocks_blocking(block_count)
+    py_blocks = block_list.to_list()
+    assert len(py_blocks) == block_count
+    tensors = [torch.from_dlpack(b) for b in py_blocks]
+    for tensor in tensors:
+        assert tensor.get_device() == DEVICE_ID  # GPU
+        assert tensor.shape == (DEVICE_NUM_BLOCKS, NUM_LAYER, PAGE_SIZE, INNER_DIM)
+        assert tensor.dtype == torch.float16  # DTYPE
+    # print(tensors)
+    for tensor in tensors:
+        tensor[0][0][0][0] = 1.0
+        tensor[HOST_NUM_BLOCKS - 1][NUM_LAYER - 1][PAGE_SIZE - 1][INNER_DIM - 1] = 1.0
+    # print(tensors)
+    py_blocks_ = block_list.to_list()
+    assert py_blocks is not py_blocks_
+    assert len(py_blocks) == len(py_blocks_)
+    tensors_ = [torch.from_dlpack(b) for b in py_blocks_]
+    for tensor, tensor_ in zip(tensors, tensors_):
+        assert tensor is not tensor_
+        assert tensor.shape == tensor_.shape
+        assert tensor.dtype == tensor_.dtype
+        assert torch.allclose(tensor, tensor_)
+
+
 async def main():
     await test_block_manager_init()
     await test_cpu_block_access()
-    # await test_gpu_block_access()
+    await test_gpu_block_access()
 
 
 if __name__ == "__main__":

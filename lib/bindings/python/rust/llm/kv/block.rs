@@ -25,23 +25,46 @@ use std::sync::{Arc, Mutex};
 
 use dynamo_llm::block_manager::block::BlockDataExt;
 
-// TODO: Different storage types?
-pub type BlockType = dynamo_llm::block_manager::block::MutableBlock<
-    dynamo_llm::block_manager::storage::PinnedStorage,
-    dynamo_llm::block_manager::block::BasicMetadata,
->;
+pub enum BlockType {
+    Pinned(
+        dynamo_llm::block_manager::block::MutableBlock<
+            dynamo_llm::block_manager::storage::PinnedStorage,
+            dynamo_llm::block_manager::block::BasicMetadata,
+        >,
+    ),
+    Device(
+        dynamo_llm::block_manager::block::MutableBlock<
+            dynamo_llm::block_manager::storage::DeviceStorage,
+            dynamo_llm::block_manager::block::BasicMetadata,
+        >,
+    ),
+}
 
 struct DlPackTensor {
     block: Arc<Mutex<BlockType>>,
+    // TODO: Metadata should be stored in the block manager?
+    dtype: dynamo_llm::common::dtype::DType,
+    device_id: usize,
 }
 
 impl ToTensor for DlPackTensor {
     fn data_ptr(&self) -> *mut std::ffi::c_void {
         let mut mutable_block = self.block.lock().unwrap();
-        let mut block_view_mut = mutable_block
-            .block_view_mut()
-            .expect("Failed to get mutable block view");
-        unsafe { block_view_mut.as_mut_ptr() as *mut std::ffi::c_void }
+        let ptr = match &mut *mutable_block {
+            BlockType::Pinned(block) => {
+                let mut block_view_mut = block
+                    .block_view_mut()
+                    .expect("Failed to get mutable Pinned block view");
+                unsafe { block_view_mut.as_mut_ptr() }
+            }
+            BlockType::Device(block) => {
+                let mut block_view_mut = block
+                    .block_view_mut()
+                    .expect("Failed to get mutable Device block view");
+                unsafe { block_view_mut.as_mut_ptr() }
+            }
+        };
+        ptr as *mut std::ffi::c_void
     }
 
     fn byte_offset(&self) -> u64 {
@@ -49,29 +72,57 @@ impl ToTensor for DlPackTensor {
     }
 
     fn device(&self) -> Device {
-        // TODO: Could there be different devices?
-        // Why torch does not support CPU_PINNED here?
-        /*Device {
-            device_type: DeviceType::CudaHost,
-            device_id: 0,
-        }*/
-        Device::CPU
+        let mutable_block = self.block.lock().unwrap();
+        match &*mutable_block {
+            BlockType::Pinned(_) => {
+                // TODO: Why torch does not support CPU_PINNED here?
+                /*Device {
+                    device_type: DeviceType::CudaHost,
+                    device_id: 0,
+                }*/
+                Device::CPU
+            }
+            BlockType::Device(_) => Device::cuda(self.device_id),
+        }
     }
 
     fn dtype(&self) -> DataType {
-        // TODO: Could there be different dtypes?
-        DataType::F16
+        // Map from dynamo_llm::common::dtype::DType to dlpark::prelude::DataType
+        match self.dtype {
+            dynamo_llm::common::dtype::DType::FP8 => {
+                // No direct FP8 equivalent, use U8 as closest alternative
+                DataType::U8
+            }
+            dynamo_llm::common::dtype::DType::FP16 => DataType::F16,
+            dynamo_llm::common::dtype::DType::BF16 => DataType::BF16,
+            dynamo_llm::common::dtype::DType::FP32 => DataType::F32,
+            dynamo_llm::common::dtype::DType::U8 => DataType::U8,
+            dynamo_llm::common::dtype::DType::U16 => DataType::U16,
+            dynamo_llm::common::dtype::DType::U32 => DataType::U32,
+            dynamo_llm::common::dtype::DType::U64 => DataType::U64,
+            dynamo_llm::common::dtype::DType::I8 => DataType::I8,
+            dynamo_llm::common::dtype::DType::I16 => DataType::I16,
+            dynamo_llm::common::dtype::DType::I32 => DataType::I32,
+            dynamo_llm::common::dtype::DType::I64 => DataType::I64,
+        }
     }
 
     fn shape_and_strides(&self) -> ShapeAndStrides {
         let mutable_block = self.block.lock().unwrap();
-
-        let num_blocks = mutable_block.num_blocks();
-        let num_layers = mutable_block.num_layers();
-        let page_size = mutable_block.page_size();
-        let inner_dim = mutable_block.inner_dim();
-
-        // TODO: Confirm this is correct?
+        let (num_blocks, num_layers, page_size, inner_dim) = match &*mutable_block {
+            BlockType::Pinned(block) => (
+                block.num_blocks(),
+                block.num_layers(),
+                block.page_size(),
+                block.inner_dim(),
+            ),
+            BlockType::Device(block) => (
+                block.num_blocks(),
+                block.num_layers(),
+                block.page_size(),
+                block.inner_dim(),
+            ),
+        };
         let shape_i64: Vec<i64> = vec![
             num_blocks as i64,
             num_layers as i64,
@@ -91,11 +142,22 @@ impl Drop for DlPackTensor {
 #[pyclass]
 pub struct Block {
     inner: Arc<Mutex<BlockType>>,
+    // TODO: Metadata should be stored in the block manager?
+    dtype: dynamo_llm::common::dtype::DType,
+    device_id: usize,
 }
 
 impl Block {
-    pub fn from_rust(block: Arc<Mutex<BlockType>>) -> Self {
-        Self { inner: block }
+    pub fn from_rust(
+        block: Arc<Mutex<BlockType>>,
+        dtype: dynamo_llm::common::dtype::DType,
+        device_id: usize,
+    ) -> Self {
+        Self {
+            inner: block,
+            dtype: dtype,
+            device_id: device_id,
+        }
     }
 }
 
@@ -126,6 +188,8 @@ impl Block {
         // Create DLPack PyCapsule
         let manager_ctx = ManagerCtx::new(DlPackTensor {
             block: self.inner.clone(),
+            dtype: self.dtype.clone(),
+            device_id: self.device_id,
         });
         let py_capsule = Python::with_gil(|py| manager_ctx.into_py(py));
         Ok(py_capsule)
@@ -141,8 +205,12 @@ impl Block {
                 .unwrap()
                 .call1(("DLDeviceType", device_type_list))
                 .unwrap();
-            let device_type = device_type_enum.getattr("CPU_PINNED").unwrap();
-            let device_id = (0_i32).into_py(py).into_bound(py);
+            let block = self.inner.lock().unwrap();
+            let device_type = match &*block {
+                BlockType::Pinned(_) => device_type_enum.getattr("CPU_PINNED").unwrap(),
+                BlockType::Device(_) => device_type_enum.getattr("CUDA").unwrap(),
+            };
+            let device_id = self.device_id.into_py(py).into_bound(py);
             let device = vec![device_type, device_id];
             PyTuple::new(py, device).unwrap().unbind()
         });
