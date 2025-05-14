@@ -24,6 +24,7 @@ pub mod disagg_router;
 pub mod engines;
 pub mod gguf;
 pub mod http;
+pub mod hub;
 pub mod key_value_store;
 pub mod kv_router;
 pub mod model_card;
@@ -36,5 +37,8 @@ pub mod tokenizers;
 pub mod tokens;
 pub mod types;
 
-#[cfg(feature = "cuda_kv")]
-pub mod kv;
+mod local_model;
+pub use local_model::LocalModel;
+
+#[cfg(feature = "block-manager")]
+pub mod block_manager;

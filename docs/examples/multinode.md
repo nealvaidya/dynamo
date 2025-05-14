@@ -1,9 +1,13 @@
 # Multinode Examples
 
+Table of Contents
+- [Single node sized models](#single-node-sized-models)
+- [Multi-node sized models](#multi-node-sized-models)
+
 ## Single node sized models
 You can deploy dynamo on multiple nodes via NATS/ETCD based discovery and communication. Here's an example of deploying disaggregated serving on 3 nodes using `nvidia/Llama-3.1-405B-Instruct-FP8`. Each node will need to be properly configured with Infiniband and/or RoCE for communication between decode and prefill workers.
 
-### Disaggregated Deployment with KV Routing
+##### Disaggregated Deployment with KV Routing
 - Node 1: Frontend, Processor, Router, Decode Worker
 - Node 2: Prefill Worker
 - Node 3: Prefill Worker
@@ -13,7 +17,7 @@ Note that this can be easily extended to more nodes. You can also run the Fronte
 **Step 1**: Start NATS/ETCD on your head node. Ensure you have the correct firewall rules to allow communication between the nodes as you will need the NATS/ETCD endpoints to be accessible by all other nodes.
 ```bash
 # node 1
-docker compose -f deploy/docker-compose.yml up -d
+docker compose -f deploy/metrics/docker-compose.yml up -d
 ```
 
 **Step 2**: Create the inference graph for this node. Here we will use the `agg_router.py` (even though we are doing disaggregated serving) graph because we want the `Frontend`, `Processor`, `Router`, and `VllmWorker` to spin up (we will spin up the other decode worker and prefill worker separately on different nodes later).
@@ -67,7 +71,7 @@ dynamo serve components.worker:VllmWorker -f ./configs/multinode-405b.yaml --ser
 
 Note the use of `--service-name`. This will only spin up the worker that you are requesting and ignore any `depends` statements.
 
-#### Client
+### Client
 
 In another terminal:
 ```bash
@@ -89,15 +93,15 @@ curl <node1-ip>:8000/v1/chat/completions \
   }'
 ```
 
-## Multinode sized models
+#### Multi-node sized models
 
 Multinode model support is coming soon. You can track progress [here](https://github.com/ai-dynamo/dynamo/issues/513)!
 
-### Aggregated Deployment
+##### Aggregated Deployment
 
-The steps for aggregated deployment of multinode sized models is similar to
+The steps for aggregated deployment of multi-node sized models is similar to
 single-node sized models, except that you need to first configure the nodes
-to be interconnected according to the framework's multinode deployment guide.
+to be interconnected according to the framework's multi-node deployment guide.
 In the below example, vLLM will be used as the framework to serve `DeepSeek-R1` model
 using tensor parallel 16 on two H100x8 nodes.
 
@@ -143,7 +147,7 @@ ray status
 #  (no resource demands)
 ```
 
-**Step 2**: On the head node, follow [LLM Deployment Guide](./llm_deployment.md#getting-started) to
+**Step 2**: On the head node, follow [LLM Deployment Guide](./README.md#getting-started) to
 setup dynamo deployment for aggregated serving, using the configuration file,
 `configs/multinode_agg_r1.yaml`, for DeepSeek-R1:
 ```bash
@@ -151,7 +155,7 @@ cd $DYNAMO_HOME/examples/llm
 dynamo serve graphs.agg:Frontend -f ./configs/multinode_agg_r1.yaml
 ```
 
-#### Client
+### Client
 
 In another terminal, you can send the same curl request as described above but
 with `"model": "deepseek-ai/DeepSeek-R1"`
@@ -174,7 +178,7 @@ curl <node1-ip>:8000/v1/chat/completions \
   }'
 ```
 
-### Disaggregated Deployment
+##### Disaggregated Deployment
 
 In this example, we will be deploying two replicas of the model (one prefill worker
 and one decode worker). We will be using 4 H100x8 nodes and group every two of them
@@ -218,7 +222,7 @@ cd $DYNAMO_HOME/examples/llm
 dynamo serve components.prefill_worker:PrefillWorker -f ./configs/mutinode_disagg_r1.yaml
 ```
 
-#### Client
+### Client
 
 In another terminal, you can send the same curl request as described in
 [aggregated deployment](#aggregated-deployment), addressing to the ip of

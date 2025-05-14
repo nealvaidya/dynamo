@@ -93,7 +93,7 @@ This example can be deployed to a Kubernetes cluster using [Dynamo Cloud](../../
 
 ### Prerequisites
 
-You must have first followed the instructions in [deploy/dynamo/helm/README.md](https://github.com/ai-dynamo/dynamo/blob/main/deploy/dynamo/helm/README.md) to create your Dynamo cloud deployment.
+You must have first followed the instructions in [deploy/cloud/helm/README.md](https://github.com/ai-dynamo/dynamo/blob/main/deploy/cloud/helm/README.md) to create your Dynamo cloud deployment.
 
 ### Deployment Steps
 
@@ -153,5 +153,3 @@ This demonstrates how:
 1. The Frontend receives "test"
 2. The Middle service adds "-mid" to create "test-mid"
 3. The Backend service adds "-back" to create "test-mid-back"
-
-
