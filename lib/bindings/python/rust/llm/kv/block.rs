@@ -133,11 +133,11 @@ impl ToTensor for DlPackTensor {
     }
 }
 
-impl Drop for DlPackTensor {
+/*impl Drop for DlPackTensor {
     fn drop(&mut self) {
         println!("Dropping DlPackTensor");
     }
-}
+}*/
 
 #[pyclass]
 pub struct Block {
@@ -218,8 +218,8 @@ impl Block {
     }
 }
 
-impl Drop for Block {
+/*impl Drop for Block {
     fn drop(&mut self) {
         println!("Dropping Block");
     }
-}
+}*/

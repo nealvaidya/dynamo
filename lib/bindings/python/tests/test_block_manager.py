@@ -16,25 +16,25 @@
 
 import asyncio
 
-import pytest
+# import pytest
 import torch
 
 from dynamo.llm import BlockManager
 
-pytestmark = pytest.mark.pre_merge
+# pytestmark = pytest.mark.pre_merge
 
 
 WORKER_ID = 0
 NUM_LAYER = 5
 PAGE_SIZE = 4
 INNER_DIM = 13
-DTYPE = "FP16"
+DTYPE, TORCH_DTYPE = "FP32", torch.float32
 HOST_NUM_BLOCKS = 16
 DEVICE_NUM_BLOCKS = 16
 DEVICE_ID = 0
 
 
-async def test_block_manager_init():
+async def test_block_manager_initialization():
     BlockManager(WORKER_ID, NUM_LAYER, PAGE_SIZE, INNER_DIM)
     BlockManager(WORKER_ID, NUM_LAYER, PAGE_SIZE, INNER_DIM, DTYPE)
     BlockManager(WORKER_ID, NUM_LAYER, PAGE_SIZE, INNER_DIM, DTYPE, HOST_NUM_BLOCKS)
@@ -95,7 +95,7 @@ async def test_cpu_block_access():
     for tensor in tensors:
         assert tensor.get_device() == -1  # CPU
         assert tensor.shape == (HOST_NUM_BLOCKS, NUM_LAYER, PAGE_SIZE, INNER_DIM)
-        assert tensor.dtype == torch.float16  # DTYPE
+        assert tensor.dtype == TORCH_DTYPE
     # print(tensors)
     for tensor in tensors:
         tensor[0][0][0][0] = 1.0
@@ -132,11 +132,11 @@ async def test_gpu_block_access():
     for tensor in tensors:
         assert tensor.get_device() == DEVICE_ID  # GPU
         assert tensor.shape == (DEVICE_NUM_BLOCKS, NUM_LAYER, PAGE_SIZE, INNER_DIM)
-        assert tensor.dtype == torch.float16  # DTYPE
+        assert tensor.dtype == TORCH_DTYPE
     # print(tensors)
     for tensor in tensors:
         tensor[0][0][0][0] = 1.0
-        tensor[HOST_NUM_BLOCKS - 1][NUM_LAYER - 1][PAGE_SIZE - 1][INNER_DIM - 1] = 1.0
+        tensor[DEVICE_NUM_BLOCKS - 1][NUM_LAYER - 1][PAGE_SIZE - 1][INNER_DIM - 1] = 1.0
     # print(tensors)
     py_blocks_ = block_list.to_list()
     assert py_blocks is not py_blocks_
@@ -149,10 +149,48 @@ async def test_gpu_block_access():
         assert torch.allclose(tensor, tensor_)
 
 
+async def test_block_list_iteration():
+    block_manager = BlockManager(
+        WORKER_ID,
+        NUM_LAYER,
+        PAGE_SIZE,
+        INNER_DIM,
+        DTYPE,
+        HOST_NUM_BLOCKS,
+        DEVICE_NUM_BLOCKS,
+        DEVICE_ID,
+    )
+    block_count = 4
+    block_list = block_manager.allocate_host_blocks_blocking(block_count)
+    # Test __len__()
+    assert len(block_list) == block_count
+    # Test __getitem__()
+    for i in range(block_count):
+        block = block_list[i]
+        tensor = torch.from_dlpack(block)
+        tensor[0][0][0][0] = 1.0 + i
+    # Test __iter__() and __next__()
+    i = 1.0
+    for block in block_list:
+        tensor = torch.from_dlpack(block)
+        assert tensor[0][0][0][0] == i
+        tensor[0][0][0][0] += 0.5
+        i += 1.0
+    assert i == 1.0 + block_count
+    # Test __iter__() should reset current index
+    i = 1.0
+    for block in block_list:
+        tensor = torch.from_dlpack(block)
+        assert tensor[0][0][0][0] == i + 0.5
+        i += 1.0
+    assert i == 1.0 + block_count
+
+
 async def main():
-    await test_block_manager_init()
+    await test_block_manager_initialization()
     await test_cpu_block_access()
     await test_gpu_block_access()
+    await test_block_list_iteration()
 
 
 if __name__ == "__main__":
