@@ -28,8 +28,8 @@ use etcd_client::{
     Certificate, Compare, CompareOp, DeleteOptions, GetOptions, Identity, PutOptions, PutResponse,
     TlsOptions, Txn, TxnOp, TxnOpResponse, WatchOptions, Watcher,
 };
-use tokio::time::{interval, Duration};
 pub use etcd_client::{ConnectOptions, KeyValue, LeaseClient};
+use tokio::time::{interval, Duration};
 
 mod lease;
 use lease::*;
@@ -349,9 +349,9 @@ impl Client {
                     return;
                 }
             }
-        
+
             let mut ticker = interval(Duration::from_secs(15));
-        
+
             loop {
                 tokio::select! {
                     maybe_resp = watch_stream.next() => {
