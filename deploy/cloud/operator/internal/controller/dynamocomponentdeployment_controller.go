@@ -79,6 +79,7 @@ const (
 	KubernetesDeploymentStrategy                         = "kubernetes"
 
 	KubeAnnotationDeploymentType = "nvidia.com/deployment-type"
+	KubeAnnotationLWSSize        = "nvidia.com/lws-size"
 	DeploymentTypeStandard       = "standard"
 	DeploymentTypeLeaderWorker   = "leader-worker"
 )
@@ -524,8 +525,19 @@ func (r *DynamoComponentDeploymentReconciler) generateVolcanoPodGroup(ctx contex
 	}
 	labels["instance-id"] = fmt.Sprintf("%d", instanceID)
 
-	// Set minMember to 2 (1 leader + 1 worker) as the minimum requirement for the set
-	minMember := int32(2)
+	// Get minMember from LWS size annotation
+	lwsSizeStr, ok := annotations[KubeAnnotationLWSSize]
+	if !ok {
+		return nil, false, fmt.Errorf("missing required annotation %s", KubeAnnotationLWSSize)
+	}
+	lwsSize, err := strconv.ParseInt(lwsSizeStr, 10, 32)
+	if err != nil {
+		return nil, false, fmt.Errorf("invalid value for annotation %s: %v", KubeAnnotationLWSSize, err)
+	}
+	if lwsSize < 1 {
+		return nil, false, fmt.Errorf("LWS size must be greater than 0, got %d", lwsSize)
+	}
+	minMember := int32(lwsSize)
 
 	podGroup := &volcanov1beta1.PodGroup{
 		ObjectMeta: metav1.ObjectMeta{
@@ -588,6 +600,8 @@ func (r *DynamoComponentDeploymentReconciler) generateLeaderWorkerSet(ctx contex
 	}
 	leaderPodTemplateSpec.ObjectMeta.Annotations["scheduling.k8s.io/group-name"] = kubeName
 
+	leaderPodTemplateSpec.Spec.SchedulerName = "volcano"
+
 	if leaderPodTemplateSpec.Spec.Containers[0].Command == nil {
 		return nil, false, errors.New("container Command cannot be nil for Ray leader pod")
 	}
@@ -611,6 +625,8 @@ func (r *DynamoComponentDeploymentReconciler) generateLeaderWorkerSet(ctx contex
 	workerPodTemplateSpec.ObjectMeta.Labels["instance-id"] = fmt.Sprintf("%d", instanceID)
 	delete(workerPodTemplateSpec.ObjectMeta.Labels, commonconsts.KubeLabelDynamoSelector)
 
+	workerPodTemplateSpec.Spec.SchedulerName = "volcano"
+
 	if workerPodTemplateSpec.ObjectMeta.Annotations == nil {
 		workerPodTemplateSpec.ObjectMeta.Annotations = make(map[string]string)
 	}
@@ -629,7 +645,18 @@ func (r *DynamoComponentDeploymentReconciler) generateLeaderWorkerSet(ctx contex
 
 	// Each individual LeaderWorkerSet always has exactly 1 replica
 	singleReplica := int32(1)
-	groupSize := int32(2)
+	size, ok := opt.dynamoComponentDeployment.ObjectMeta.Annotations[KubeAnnotationLWSSize]
+	if !ok {
+		return nil, false, fmt.Errorf("LWS size annotation '%s' is required", KubeAnnotationLWSSize)
+	}
+	sizeInt, err := strconv.ParseInt(size, 10, 32)
+	if err != nil {
+		return nil, false, errors.Wrap(err, "LWS size annotation value must be an integer")
+	}
+	if sizeInt < 1 {
+		return nil, false, fmt.Errorf("LWS size must be greater than 0, got %d", sizeInt)
+	}
+	groupSize := int32(sizeInt)
 
 	leaderWorkerSet.Spec = leaderworkersetv1.LeaderWorkerSetSpec{
 		Replicas: &singleReplica,
