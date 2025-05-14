@@ -362,6 +362,9 @@ func overrideWithDynDeploymentConfig(ctx context.Context, dynamoDeploymentCompon
 						requests.Custom = componentDynConfig.ServiceArgs.Resources.Custom
 						limits.Custom = componentDynConfig.ServiceArgs.Resources.Custom
 					}
+					if err := dynamo.SetLwsAnnotations(componentDynConfig.ServiceArgs, dynamoDeploymentComponent); err != nil {
+						return err
+					}
 				}
 			}
 			break

@@ -99,8 +99,9 @@ type DynDeploymentServiceConfig struct {
 
 // ServiceArgs represents the arguments that can be passed to any service
 type ServiceArgs struct {
-	Workers   *int32     `json:"workers,omitempty"`
-	Resources *Resources `json:"resources,omitempty"`
+	Workers     *int32     `json:"workers,omitempty"`
+	Resources   *Resources `json:"resources,omitempty"`
+	GpusPerNode *int32     `json:"gpus_per_node,omitempty"`
 }
 
 func (s ServiceConfig) GetNamespace() *string {
@@ -255,13 +256,13 @@ func GetDynamoGraphConfig(ctx context.Context, dynamoDeployment *v1alpha1.Dynamo
 	return ParseDynamoGraphConfig(ctx, yamlContent)
 }
 
-func setLwsAnnotations(serviceConfig Config, deployment *v1alpha1.DynamoComponentDeployment) error {
-	if serviceConfig.Resources != nil &&
-		serviceConfig.Resources.GPU != nil && *serviceConfig.Resources.GPU != "" && *serviceConfig.Resources.GPU != "0" &&
-		serviceConfig.GpusPerNode != nil && *serviceConfig.GpusPerNode > 0 {
+func SetLwsAnnotations(serviceArgs *ServiceArgs, deployment *v1alpha1.DynamoComponentDeployment) error {
+	if serviceArgs.Resources != nil &&
+		serviceArgs.Resources.GPU != nil && *serviceArgs.Resources.GPU != "" && *serviceArgs.Resources.GPU != "0" &&
+		serviceArgs.GpusPerNode != nil && *serviceArgs.GpusPerNode > 0 {
 
-		gpusPerNode := *serviceConfig.GpusPerNode
-		totalGpusStr := *serviceConfig.Resources.GPU
+		gpusPerNode := *serviceArgs.GpusPerNode
+		totalGpusStr := *serviceArgs.Resources.GPU
 		totalGpus, errTotalGpu := strconv.Atoi(totalGpusStr)
 
 		if errTotalGpu != nil {
@@ -350,7 +351,12 @@ func GenerateDynamoComponentsDeployments(ctx context.Context, parentDynamoGraphD
 				deployment.Spec.Resources.Limits.GPU = *service.Config.Resources.GPU
 			}
 
-			if err := setLwsAnnotations(service.Config, deployment); err != nil {
+			serviceArgs := ServiceArgs{
+				Resources:   service.Config.Resources,
+				GpusPerNode: service.Config.GpusPerNode,
+				Workers:     service.Config.Workers,
+			}
+			if err := SetLwsAnnotations(&serviceArgs, deployment); err != nil {
 				return nil, err
 			}
 		}

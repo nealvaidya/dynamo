@@ -310,6 +310,64 @@ func Test_overrideWithDynDeploymentConfig(t *testing.T) {
 			},
 		},
 		{
+			name: "override workers and resources with gpusPerNode",
+			args: args{
+				ctx: context.Background(),
+				dynamoDeploymentComponent: &nvidiacomv1alpha1.DynamoComponentDeployment{
+					Spec: nvidiacomv1alpha1.DynamoComponentDeploymentSpec{
+						DynamoComponentDeploymentSharedSpec: nvidiacomv1alpha1.DynamoComponentDeploymentSharedSpec{
+							ServiceName: "Frontend",
+							Envs: []corev1.EnvVar{
+								{
+									Name:  "DYN_DEPLOYMENT_CONFIG",
+									Value: `{"Frontend":{"port":8080,"ServiceArgs":{"Workers":3, "Resources":{"CPU":"2", "Memory":"2Gi", "GPU":"16"}, "gpus_per_node":8}},"Planner":{"environment":"kubernetes"}}`,
+								},
+							},
+							Replicas: &[]int32{1}[0],
+							Resources: &common.Resources{
+								Requests: &common.ResourceItem{
+									CPU:    "1",
+									Memory: "1Gi",
+									GPU:    "1",
+								},
+							},
+						},
+					},
+				},
+			},
+			wantErr: false,
+			expected: &nvidiacomv1alpha1.DynamoComponentDeployment{
+				Spec: nvidiacomv1alpha1.DynamoComponentDeploymentSpec{
+					DynamoComponentDeploymentSharedSpec: nvidiacomv1alpha1.DynamoComponentDeploymentSharedSpec{
+						ServiceName: "Frontend",
+						Envs: []corev1.EnvVar{
+							{
+								Name:  "DYN_DEPLOYMENT_CONFIG",
+								Value: `{"Frontend":{"port":8080,"ServiceArgs":{"Workers":3, "Resources":{"CPU":"2", "Memory":"2Gi", "GPU":"16"}, "gpus_per_node":8}},"Planner":{"environment":"kubernetes"}}`,
+							},
+						},
+						Replicas: &[]int32{3}[0],
+						Resources: &common.Resources{
+							Requests: &common.ResourceItem{
+								CPU:    "2",
+								Memory: "2Gi",
+								GPU:    "16",
+							},
+							Limits: &common.ResourceItem{
+								CPU:    "2",
+								Memory: "2Gi",
+								GPU:    "16",
+							},
+						},
+						Annotations: map[string]string{
+							"nvidia.com/deployment-type": "leader-worker",
+							"nvidia.com/lws-size":        "2",
+						},
+					},
+				},
+			},
+		},
+		{
 			name: "override subset of resources",
 			args: args{
 				ctx: context.Background(),
