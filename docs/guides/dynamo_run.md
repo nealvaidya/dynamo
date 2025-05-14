@@ -273,7 +273,7 @@ cd target/debug
 ./dynamo-run in=http out=sglang --model-path ~/llms/DeepSeek-R1-Distill-Llama-70B/ --tensor-parallel-size 8
 ```
 
-To pass extra arguments to the sglang engine see [Extra engine arguments](#Extra engine arguments) below.
+To pass extra arguments to the sglang engine see *Extra engine arguments* below.
 
 **Multi-GPU**
 
@@ -521,7 +521,6 @@ More fully-featured Backend engines (used by `dynamo-run`):
 
 The input defaults to `in=text`. The output will default to `out=mistralrs` engine, unless it is disabled with `--no-default-features` in which case vllm is used.
 
-<a id="extra_engine_arguments"></a>
 ### Extra engine arguments
 
 The vllm and sglang backends support passing any argument the engine accepts.
