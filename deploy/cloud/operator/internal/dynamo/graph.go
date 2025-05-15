@@ -81,7 +81,7 @@ type Config struct {
 	HttpExposed  bool          `yaml:"http_exposed,omitempty"`
 	ApiEndpoints []string      `yaml:"api_endpoints,omitempty"`
 	Workers      *int32        `yaml:"workers,omitempty"`
-	GpusPerNode  *int32        `yaml:"gpus_per_node,omitempty"`
+	TotalGpus    *int32        `yaml:"total_gpus,omitempty"`
 }
 
 type ServiceConfig struct {
@@ -99,9 +99,9 @@ type DynDeploymentServiceConfig struct {
 
 // ServiceArgs represents the arguments that can be passed to any service
 type ServiceArgs struct {
-	Workers     *int32     `json:"workers,omitempty"`
-	Resources   *Resources `json:"resources,omitempty"`
-	GpusPerNode *int32     `json:"gpus_per_node,omitempty"`
+	Workers   *int32     `json:"workers,omitempty"`
+	Resources *Resources `json:"resources,omitempty"`
+	TotalGpus *int32     `json:"total_gpus,omitempty"`
 }
 
 func (s ServiceConfig) GetNamespace() *string {
@@ -259,18 +259,17 @@ func GetDynamoGraphConfig(ctx context.Context, dynamoDeployment *v1alpha1.Dynamo
 func SetLwsAnnotations(serviceArgs *ServiceArgs, deployment *v1alpha1.DynamoComponentDeployment) error {
 	if serviceArgs.Resources != nil &&
 		serviceArgs.Resources.GPU != nil && *serviceArgs.Resources.GPU != "" && *serviceArgs.Resources.GPU != "0" &&
-		serviceArgs.GpusPerNode != nil && *serviceArgs.GpusPerNode > 0 {
+		serviceArgs.TotalGpus != nil && *serviceArgs.TotalGpus > 0 {
 
-		gpusPerNode := *serviceArgs.GpusPerNode
-		totalGpusStr := *serviceArgs.Resources.GPU
-		totalGpus, errTotalGpu := strconv.Atoi(totalGpusStr)
+		gpusPerNodeStr := *serviceArgs.Resources.GPU
+		gpusPerNode, errGpusPerNode := strconv.Atoi(gpusPerNodeStr)
 
-		if errTotalGpu != nil {
-			return fmt.Errorf("failed to parse total GPUs value '%s' for service %s: %w", totalGpusStr, deployment.Spec.ServiceName, errTotalGpu)
+		if errGpusPerNode != nil {
+			return fmt.Errorf("failed to parse GPUs per node value '%s' for service %s: %w", gpusPerNodeStr, deployment.Spec.ServiceName, errGpusPerNode)
 		}
 
 		// Calculate lwsSize using ceiling division to ensure enough nodes for all GPUs
-		lwsSize := (totalGpus + int(gpusPerNode) - 1) / int(gpusPerNode)
+		lwsSize := (int(*serviceArgs.TotalGpus) + gpusPerNode - 1) / gpusPerNode
 		if lwsSize > 1 {
 			if deployment.Spec.Annotations == nil {
 				deployment.Spec.Annotations = make(map[string]string)
@@ -352,9 +351,9 @@ func GenerateDynamoComponentsDeployments(ctx context.Context, parentDynamoGraphD
 			}
 
 			serviceArgs := ServiceArgs{
-				Resources:   service.Config.Resources,
-				GpusPerNode: service.Config.GpusPerNode,
-				Workers:     service.Config.Workers,
+				Resources: service.Config.Resources,
+				TotalGpus: service.Config.TotalGpus,
+				Workers:   service.Config.Workers,
 			}
 			if err := SetLwsAnnotations(&serviceArgs, deployment); err != nil {
 				return nil, err

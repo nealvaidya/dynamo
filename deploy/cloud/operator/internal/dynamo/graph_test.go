@@ -918,9 +918,9 @@ func TestSetLwsAnnotations(t *testing.T) {
 			args: args{
 				serviceArgs: &ServiceArgs{
 					Resources: &Resources{
-						GPU: &[]string{"16"}[0],
+						GPU: &[]string{"8"}[0],
 					},
-					GpusPerNode: &[]int32{8}[0],
+					TotalGpus: &[]int32{16}[0],
 				},
 				deployment: &v1alpha1.DynamoComponentDeployment{},
 			},

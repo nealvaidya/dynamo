@@ -26,6 +26,7 @@ import (
 	"github.com/ai-dynamo/dynamo/deploy/cloud/operator/api/dynamo/common"
 	nvidiacomv1alpha1 "github.com/ai-dynamo/dynamo/deploy/cloud/operator/api/v1alpha1"
 	"github.com/bsm/gomega"
+	"github.com/google/go-cmp/cmp"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -320,7 +321,7 @@ func Test_overrideWithDynDeploymentConfig(t *testing.T) {
 							Envs: []corev1.EnvVar{
 								{
 									Name:  "DYN_DEPLOYMENT_CONFIG",
-									Value: `{"Frontend":{"port":8080,"ServiceArgs":{"Workers":3, "Resources":{"CPU":"2", "Memory":"2Gi", "GPU":"16"}, "gpus_per_node":8}},"Planner":{"environment":"kubernetes"}}`,
+									Value: `{"Frontend":{"port":8080,"ServiceArgs":{"Workers":3, "Resources":{"CPU":"2", "Memory":"2Gi", "GPU":"8"}, "total_gpus":16}},"Planner":{"environment":"kubernetes"}}`,
 								},
 							},
 							Replicas: &[]int32{1}[0],
@@ -343,7 +344,7 @@ func Test_overrideWithDynDeploymentConfig(t *testing.T) {
 						Envs: []corev1.EnvVar{
 							{
 								Name:  "DYN_DEPLOYMENT_CONFIG",
-								Value: `{"Frontend":{"port":8080,"ServiceArgs":{"Workers":3, "Resources":{"CPU":"2", "Memory":"2Gi", "GPU":"16"}, "gpus_per_node":8}},"Planner":{"environment":"kubernetes"}}`,
+								Value: `{"Frontend":{"port":8080,"ServiceArgs":{"Workers":3, "Resources":{"CPU":"2", "Memory":"2Gi", "GPU":"8"}, "total_gpus":16}},"Planner":{"environment":"kubernetes"}}`,
 							},
 						},
 						Replicas: &[]int32{3}[0],
@@ -351,12 +352,12 @@ func Test_overrideWithDynDeploymentConfig(t *testing.T) {
 							Requests: &common.ResourceItem{
 								CPU:    "2",
 								Memory: "2Gi",
-								GPU:    "16",
+								GPU:    "8",
 							},
 							Limits: &common.ResourceItem{
 								CPU:    "2",
 								Memory: "2Gi",
-								GPU:    "16",
+								GPU:    "8",
 							},
 						},
 						Annotations: map[string]string{
@@ -424,11 +425,12 @@ func Test_overrideWithDynDeploymentConfig(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			g := gomega.NewGomegaWithT(t)
 			if err := overrideWithDynDeploymentConfig(tt.args.ctx, tt.args.dynamoDeploymentComponent); (err != nil) != tt.wantErr {
 				t.Errorf("overrideWithDynDeploymentConfig() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			g.Expect(tt.args.dynamoDeploymentComponent).To(gomega.Equal(tt.expected))
+			if diff := cmp.Diff(tt.args.dynamoDeploymentComponent, tt.expected); diff != "" {
+				t.Errorf("overrideWithDynDeploymentConfig() mismatch (-want +got):\n%s", diff)
+			}
 		})
 	}
 }
