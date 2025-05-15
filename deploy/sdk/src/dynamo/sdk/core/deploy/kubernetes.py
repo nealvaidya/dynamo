@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import sys
 import time
 import typing as t
 
@@ -31,6 +30,7 @@ class KubernetesDeploymentManager(DeploymentManager):
     Implementation of DeploymentManager that talks to the dynamo_store deployment API.
     Accepts **kwargs for backend-specific options.
     Handles error reporting and payload construction according to the API schema.
+    Raises exceptions for errors; CLI handles user interaction.
     """
 
     def __init__(self, endpoint: str):
@@ -68,24 +68,13 @@ class KubernetesDeploymentManager(DeploymentManager):
         except requests.HTTPError as e:
             status = e.response.status_code if e.response else None
             msg = e.response.text if e.response else str(e)
-            if status == 409:
-                print(f"Deployment '{name}' already exists.")
-            elif status in (400, 422):
-                print(f"Validation error: {msg}")
-            elif status == 404:
-                print(f"Endpoint not found: {url}")
-            elif status == 500:
-                print(f"Internal server error: {msg}")
-            else:
-                print(f"Failed to create deployment: {msg}")
-
-            sys.exit(1)
+            raise RuntimeError((status, msg, url))
 
     def update_deployment(
         self, deployment_id: str, deployment: Deployment, **kwargs
     ) -> None:
         """Update an existing deployment."""
-        bento = kwargs.get("pipeline") or deployment.namespace
+        component = kwargs.get("pipeline") or deployment.namespace
         dev = kwargs.get("dev", False)
         envs = kwargs.get("envs")
         labels = kwargs.get("labels")
@@ -94,7 +83,7 @@ class KubernetesDeploymentManager(DeploymentManager):
         access_authorization = kwargs.get("access_authorization", False)
         payload = {
             "name": deployment.name,
-            "bento": bento,
+            "component": component,
             "dev": dev,
             "envs": envs,
             "labels": labels,
@@ -110,16 +99,7 @@ class KubernetesDeploymentManager(DeploymentManager):
         except requests.HTTPError as e:
             status = e.response.status_code if e.response else None
             msg = e.response.text if e.response else str(e)
-            if status == 404:
-                print(f"Deployment '{deployment_id}' not found.")
-            elif status in (400, 422):
-                print(f"Validation error: {msg}")
-            elif status == 500:
-                print(f"Internal server error: {msg}")
-            else:
-                print(f"Failed to update deployment: {msg}")
-
-            sys.exit(1)
+            raise RuntimeError((status, msg, url))
 
     def get_deployment(self, deployment_id: str, **kwargs) -> dict[str, t.Any]:
         """Get deployment details."""
@@ -131,11 +111,7 @@ class KubernetesDeploymentManager(DeploymentManager):
         except requests.HTTPError as e:
             status = e.response.status_code if e.response else None
             msg = e.response.text if e.response else str(e)
-            if status == 404:
-                print(f"Deployment '{deployment_id}' not found.")
-            else:
-                print(f"Failed to get deployment: {msg}")
-            sys.exit(1)
+            raise RuntimeError((status, msg, url))
 
     def list_deployments(self, **kwargs) -> list[dict[str, t.Any]]:
         """List all deployments."""
@@ -146,11 +122,10 @@ class KubernetesDeploymentManager(DeploymentManager):
             data = resp.json()
             return data.get("items", [])
         except requests.HTTPError as e:
-            # status = e.response.status_code if e.response else None
             msg = e.response.text if e.response else str(e)
-            print(f"Failed to list deployments: {msg}")
-
-            sys.exit(1)
+            raise RuntimeError(
+                (e.response.status_code if e.response else None, msg, url)
+            )
 
     def delete_deployment(self, deployment_id: str, **kwargs) -> None:
         """Delete a deployment."""
@@ -161,12 +136,7 @@ class KubernetesDeploymentManager(DeploymentManager):
         except requests.HTTPError as e:
             status = e.response.status_code if e.response else None
             msg = e.response.text if e.response else str(e)
-            if status == 404:
-                print(f"Deployment '{deployment_id}' not found.")
-            else:
-                print(f"Failed to delete deployment: {msg}")
-
-            sys.exit(1)
+            raise RuntimeError((status, msg, url))
 
     def get_status(self, deployment_id: str, **kwargs) -> DeploymentStatus:
         dep = self.get_deployment(deployment_id)
