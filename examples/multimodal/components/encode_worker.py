@@ -16,6 +16,7 @@
 import asyncio
 import logging
 from io import BytesIO
+from queue import Queue
 from typing import AsyncIterator
 
 import connect
@@ -43,6 +44,8 @@ except ImportError as e:
 
     DEVICE = "cpu"
 
+CACHE_SIZE_MAXIMUM = 8
+
 
 @service(
     dynamo={
@@ -68,6 +71,9 @@ class VllmEncodeWorker:
         # Create a list of connector tasks w/ a backgound task to remove completed tasks.
         self._tasks: list[asyncio.Task] = []
         self._is_running = True
+
+        self._image_cache: dict[str, Image.Image] = {}
+        self._cache_queue: Queue[str] = Queue(maxsize=CACHE_SIZE_MAXIMUM)
 
         # Define a routine to clean up completed tasks.
         async def task_gc():
@@ -113,10 +119,25 @@ class VllmEncodeWorker:
         # 7. Await for the write operation to complete.
         # 8. Yield the encode response.
 
-        logger.debug(
-            f"Downloading/opening image for request: {{ id: {request.request_id}, image_url: '{request.image_url}' }}."
-        )
-        image = self.open_image(request.image_url)
+        # Either retrieve the image from the cache or download it and then cache it.
+        if request.image_url in self._image_cache:
+            image = self._image_cache[request.image_url]
+            logger.debug(
+                f"Image found in cache for request: {{ id: {request.request_id}, image_url: '{request.image_url}' }}."
+            )
+        else:
+            image = self.open_image(request.image_url)
+            logger.debug(
+                f"Downloading/opening image for request: {{ id: {request.request_id}, image_url: '{request.image_url}' }}."
+            )
+            # Cache the image for future use, and evict the oldest image if the cache is full.
+            if self._cache_queue.full():
+                oldest_image_url = self._cache_queue.get()
+                del self._image_cache[oldest_image_url]
+
+            self._image_cache[request.image_url] = image
+            self._cache_queue.put(request.image_url)
+
         logger.debug(
             f"Processing image for request: {{ id: {request.request_id}, image_url: '{request.image_url}' }}"
         )
