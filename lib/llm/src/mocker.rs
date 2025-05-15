@@ -16,5 +16,6 @@
 pub mod evictor;
 pub mod kv_manager;
 pub mod protocols;
+pub mod scheduler;
 pub mod sequence;
 pub mod tokens;

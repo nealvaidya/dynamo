@@ -57,8 +57,8 @@ pub enum MoveBlockResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DirectRequest {
-    pub hashes: Vec<Token>,
-    pub max_output_tokens: u64,
+    pub tokens: Vec<Token>,
+    pub max_output_tokens: usize,
 }
 
 #[cfg(test)]
