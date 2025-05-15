@@ -350,8 +350,6 @@ impl Client {
                 }
             }
 
-            let mut ticker = interval(Duration::from_secs(15));
-
             loop {
                 tokio::select! {
                     maybe_resp = watch_stream.next() => {
@@ -388,11 +386,9 @@ impl Client {
                             }
                         }
                     }
-                    _ = ticker.tick() => {
-                        if tx.is_closed() {
-                            tracing::debug!("no more receivers, stopping watcher");
-                            return;
-                        }
+                    _ = tx.closed() => {
+                        tracing::debug!("no more receivers, stopping watcher");
+                        return;
                     }
                 }
             }
