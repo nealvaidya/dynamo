@@ -39,7 +39,49 @@ class KubernetesDeploymentManager(DeploymentManager):
         self.namespace = "default"
 
     def create_deployment(self, deployment: Deployment, **kwargs) -> str:
-        """Create a new deployment."""
+        """Create a new deployment. Ensures all components and versions are registered/uploaded before creating the deployment."""
+        session = self.session
+        endpoint = self.endpoint
+
+        # For each service/component in the deployment, upload it to the API store
+        for service in deployment.services:
+            if ":" not in service.name or len(parts := service.name.split(":")) != 2:
+                raise ValueError("Invalid service name format, expected 'name:version'")
+            name, version = parts
+            description = f"Auto-registered by Dynamo's KubernetesDeploymentManager for {name}:{version}"
+            manifest = {
+                "service": name,
+            }
+            build_at = kwargs.get("build_at")
+            labels = service.environment if hasattr(service, "environment") else None
+
+            comp_url = f"{endpoint}/api/v1/dynamo_components"
+            comp_payload = {
+                "name": name,
+                "description": description,
+            }
+            if labels:
+                comp_payload["labels"] = labels
+            resp = session.post(comp_url, json=comp_payload)
+            if resp.status_code not in (200, 201, 409):
+                raise RuntimeError(f"Failed to create component: {resp.text}")
+
+            ver_url = f"{endpoint}/api/v1/dynamo_components/{name}/versions"
+            ver_payload = {
+                "description": description,
+                "version": version,
+                "manifest": manifest,
+                "build_at": build_at or "2024-01-01T00:00:00Z",
+            }
+            if labels:
+                ver_payload["labels"] = [
+                    {"key": k, "value": v} for k, v in labels.items()
+                ]
+            resp = session.post(ver_url, json=ver_payload)
+            if resp.status_code not in (200, 201, 409):
+                raise RuntimeError(f"Failed to create component version: {resp.text}")
+
+        # Now create the deployment
         component = kwargs.get("pipeline") or deployment.namespace
         name = deployment.name
         dev = kwargs.get("dev", False)
@@ -48,7 +90,6 @@ class KubernetesDeploymentManager(DeploymentManager):
         secrets = kwargs.get("secrets")
         services = kwargs.get("services", {})
         access_authorization = kwargs.get("access_authorization", False)
-
         payload = {
             "name": name,
             "component": component,

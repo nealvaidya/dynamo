@@ -25,7 +25,7 @@ from rich.panel import Panel
 
 from dynamo.sdk.core.deploy.bento_cloud import BentoCloudDeploymentManager
 from dynamo.sdk.core.deploy.kubernetes import KubernetesDeploymentManager
-from dynamo.sdk.core.protocol.deployment import Deployment, DeploymentManager
+from dynamo.sdk.core.protocol.deployment import Deployment, DeploymentManager, Service
 
 app = typer.Typer(
     help="Deploy Dynamo applications to Dynamo Cloud Kubernetes Platform",
@@ -96,7 +96,8 @@ def _handle_deploy_create(
     deployment = Deployment(
         name=name or (pipeline if pipeline else "unnamed-deployment"),
         namespace="default",
-        services=[],
+        services=[Service(name=pipeline, namespace="", class_name="")],
+        # how do we get all the services in the pipeline? we don't want to assume they're just in ~/bentoml
     )
     try:
         with console.status("[bold green]Creating deployment...") as status:
