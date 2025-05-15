@@ -25,7 +25,9 @@ This directory contains examples and reference implementations for deploying Lar
 See [deployment architectures](llm_deployment.md#Deployment Architectures) to learn about the general idea of the architecture.
 Note that this TensorRT-LLM version does not support all the options yet.
 
-Note: TensorRT-LLM disaggregation does not support conditional disaggregation yet. You can only configure the deployment to always use aggregate or disaggregated serving.
+```{note}
+TensorRT-LLM disaggregation does not support conditional disaggregation yet. You can only configure the deployment to always use aggregate or disaggregated serving.
+```
 
 ## Getting Started
 
@@ -108,8 +110,9 @@ This figure shows an overview of the major components to deploy:
 
 ```
 
-Note: The above architecture illustrates all the components. The final components
-that get spawned depend upon the chosen graph.
+```{note}
+The above architecture illustrates all the components. The final components that get spawned depend upon the chosen graph.
+```
 
 ### Example architectures
 

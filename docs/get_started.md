@@ -41,7 +41,7 @@ Although not needed for local development, deploying your Dynamo pipelines to Ku
 - NVIDIA NGC Container Registry (nvcr.io)
 - Any private registry
 
-Here's how to build it:
+To build it:
 
 ```bash
 ./container/build.sh
@@ -81,9 +81,9 @@ Hmm, I need to come up with a suitable reply. ...
 
 Dynamo provides a simple way to spin up a local set of inference components including:
 
-- **OpenAI Compatible Frontend** – High performance OpenAI compatible http api server written in Rust.
-- **Basic and Kv Aware Router** – Route and load balance traffic to a set of workers.
-- **Workers** – Set of pre-configured LLM serving engines.
+- **OpenAI Compatible Frontend**–High performance OpenAI compatible http api server written in Rust.
+- **Basic and Kv Aware Router**–Route and load balance traffic to a set of workers.
+- **Workers**–Set of pre-configured LLM serving engines.
 
 To run a minimal configuration you can use a pre-configured
 example.
@@ -123,7 +123,7 @@ curl localhost:8000/v1/chat/completions   -H "Content-Type: application/json"   
 
 ## Local Development
 
-If you use vscode or cursor, we have a .devcontainer folder built on [Microsofts Extension](https://code.visualstudio.com/docs/devcontainers/containers). For instructions see the [ReadMe](https://github.com/ai-dynamo/dynamo/blob/main/.devcontainer/README.md) for more details.
+If you use vscode or cursor, use the .devcontainer folder built on [Microsofts Extension](https://code.visualstudio.com/docs/devcontainers/containers). For instructions see the [ReadMe](https://github.com/ai-dynamo/dynamo/blob/main/.devcontainer/README.md) for more details.
 
 Otherwise, to develop locally, we recommend working inside of the container
 

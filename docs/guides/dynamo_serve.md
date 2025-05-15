@@ -230,7 +230,7 @@ curl localhost:8000/v1/chat/completions   -H "Content-Type: application/json"   
 
 ## Close deployment
 
-```{admonition} Important
+```{important}
 We are aware of an issue where vLLM subprocesses might not be killed when `ctrl-c` is pressed.
 We are working on addressing this. Relevant vLLM issues can be found [here](https://github.com/vllm-project/vllm/pull/8492) and [here](https://github.com/vllm-project/vllm/issues/6219#issuecomment-2439257824).
 

@@ -174,7 +174,7 @@ curl localhost:8000/v1/chat/completions   -H "Content-Type: application/json"   
 
 ### Multi-node deployment
 
-See [multinode-examples.md](multinode-examples.md) for more details.
+See [Multinode Examples](multinode.md) for more details.
 
 ### Close deployment
 
@@ -186,9 +186,11 @@ These examples can be deployed to a Kubernetes cluster using [Dynamo Cloud](../.
 
 ### Prerequisites
 
-You must have first followed the instructions in [deploy/cloud/helm/README.md](../../deploy/cloud/helm/README.md) to install Dynamo Cloud on your Kubernetes cluster.
+You must have first followed the instructions in [deploy/cloud/helm/README.md](../../deploy/cloud/helm/README.md) to install Dynamo Cloud on your Kubernetes cluster. [deploy/cloud/helm]
 
-**Note**: The `KUBE_NS` variable in the following steps must match the Kubernetes namespace where you installed Dynamo Cloud. You must also expose the `dynamo-store` service externally. This will be the endpoint the CLI uses to interface with Dynamo Cloud.
+```{note}
+The `KUBE_NS` variable in the following steps must match the Kubernetes namespace where you installed Dynamo Cloud. You must also expose the `dynamo-store` service externally. This will be the endpoint the CLI uses to interface with Dynamo Cloud.
+```
 
 ### Deployment Steps
 

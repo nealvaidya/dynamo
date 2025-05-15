@@ -147,7 +147,7 @@ ray status
 #  (no resource demands)
 ```
 
-**Step 2**: On the head node, follow [LLM Deployment Guide](./README.md#getting-started) to
+**Step 2**: On the head node, follow [LLM deployment examples](https://github.com/ai-dynamo/dynamo/blob/main/examples/llm/README.md) to
 setup dynamo deployment for aggregated serving, using the configuration file,
 `configs/multinode_agg_r1.yaml`, for DeepSeek-R1:
 ```bash

@@ -620,12 +620,6 @@ For more information on Disaggregated Serving, see the
 
 ## Additional Resources
 
-<<<<<<< HEAD:docs/guides/backend.md
 - Check the [examples](https://github.com/ai-dynamo/dynamo/tree/main/examples) directory for more detailed implementations
 - Refer to the [Dynamo SDK Docs](../API/sdk.md) for API details.
 - For Disaggregated Serving, see the [general guide](../architecture/disagg_serving.md) and [performance tuning guide](disagg_perf_tuning.md).
-=======
-- Check the [examples](../examples/) directory for more detailed implementations
-- Refer to the [Dynamo SDK Docs](../deploy/sdk/docs/sdk/README.md) for API details.
-- For Disaggregated Serving, see the [general guide](../docs/disagg_serving.md) and [performance tuning guide](../docs/guides/disagg_perf_tuning.md).
->>>>>>> main:docs/backend.md

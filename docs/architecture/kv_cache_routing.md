@@ -76,7 +76,7 @@ To get a feel for how KV Cache management works on a single worker with KV Cache
     - The system applies an eviction policy (e.g., LRU, LFU) to identify blocks for removal
     - Selected blocks are evicted from the cache
     - **KVPublisher emits a KV removed event notifying KVIndexer about the removed block.**
-    - Alternatively, some systems may offload less-frequently used blocks to CPU memory. See [KV Offloading in Dynamo](kv_cache_manager.md).
+    - Alternatively, some systems may offload less-frequently used blocks to CPU memory.
 7. KV computation:
     - For new blocks, the model computes key and value tensors
     - These tensors are stored in the newly allocated cache blocks

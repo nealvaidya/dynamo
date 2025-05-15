@@ -273,7 +273,7 @@ cd target/debug
 ./dynamo-run in=http out=sglang --model-path ~/llms/DeepSeek-R1-Distill-Llama-70B/ --tensor-parallel-size 8
 ```
 
-To pass extra arguments to the sglang engine see *Extra engine arguments* below.
+To pass extra arguments to the sglang engine see [Extra engine arguments](#extra-engine-arguments).
 
 **Multi-GPU**
 
@@ -339,7 +339,7 @@ Inside that virtualenv:
 
 ```
 
-To pass extra arguments to the vllm engine see [Extra engine arguments](#extra_engine_arguments) below.
+To pass extra arguments to the vllm engine see [Extra engine arguments](#extra-engine-arguments) below.
 
 **Multi-GPU**
 

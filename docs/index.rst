@@ -17,7 +17,7 @@
 Welcome to NVIDIA Dynamo
 ========================
 
-NVIDIA Dynamo is a high-throughput, low-latency inference framework designed to serve generative AI and reasoning models in multinode distributed environments.
+NVIDIA Dynamo is a high-throughput low-latency inference framework designed for serving generative AI and reasoning models in multi-node distributed environments.
 
 Dive in: Examples
 -----------------------
@@ -55,7 +55,7 @@ Overview
 --------
 
 The NVIDIA Dynamo Platform is a high-performance, low-latency inference platform
-designed to serve all AI models — across any framework, architecture, or deployment scale.
+designed to serve all AI models—across any framework, architecture, or deployment scale.
 Dynamo is inference engine agnostic, supporting TRT-LLM, vLLM, SGLang, and others, and captures
 LLM-specific capabilities such as:
 
@@ -81,7 +81,7 @@ and driven by a transparent, OSS (Open Source Software) first development approa
 
    High Level Architecture <architecture/architecture.md>
    Disaggregated Serving <architecture/disagg_serving.md>
-   KV Cache Managment <architecture/kv_cache_manager.md>
+   KV Block Manager <architecture/kvbm_intro.rst>
    KV Cache Routing <architecture/kv_cache_routing.md>
    Planner <guides/planner.md>
 
@@ -92,9 +92,8 @@ and driven by a transparent, OSS (Open Source Software) first development approa
    CLI Overview <guides/cli_overview.md>
    Running Dynamo (dynamo run) <guides/dynamo_run.md>
    Serving Models (dynamo serve) <guides/dynamo_serve.md>
-   Building Dynamo (dynamo build) [Experimental] <guides/dynamo_build.md>
+   Building Dynamo (dynamo build) <guides/dynamo_build.md>
    Deployment (dynamo deploy) <guides/dynamo_deploy/README.md>
-
 
 .. toctree::
    :hidden:
@@ -104,14 +103,12 @@ and driven by a transparent, OSS (Open Source Software) first development approa
    Disaggregation and Performance Tuning <guides/disagg_perf_tuning.md>
    Planner Benchmark Example <guides/planner_benchmark/benchmark_planner.md>
 
-
-
 .. toctree::
    :hidden:
    :caption: Deployment Guides
 
-   Deploying Dynamo Inference Graphs to Kubernetes using the Dynamo Cloud Platform <guides/dynamo_deploy/operator_deployment.md>
    Dynamo Cloud Kubernetes Platform <guides/dynamo_deploy/dynamo_cloud.md>
+   Deploying Dynamo Inference Graphs to Kubernetes using the Dynamo Cloud Platform <guides/dynamo_deploy/operator_deployment.md>
    Manual Helm Deployment <guides/dynamo_deploy/manual_helm_deployment.md>
    Minikube Setup Guide <guides/dynamo_deploy/minikube.md>
 
