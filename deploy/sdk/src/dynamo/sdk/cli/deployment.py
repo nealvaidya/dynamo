@@ -67,6 +67,7 @@ def deploy(
         help="Environment variable(s) to set (format: KEY=VALUE). Note: These environment variables will be set on ALL services in your Dynamo pipeline.",
     ),
     target: str = typer.Option(..., "--target", "-t", help="Deployment target"),
+    dev: bool = typer.Option(False, "--dev", help="Development mode for deployment"),
 ) -> None:
     """Create a deployment on Dynamo Cloud."""
     deployment_manager = get_deployment_manager(target, endpoint)
@@ -75,7 +76,16 @@ def deploy(
         namespace="default",
         services=[],
     )
-    deployment_manager.create_deployment(deployment)
+    deployment_manager.create_deployment(
+        deployment,
+        wait=wait,
+        timeout=timeout,
+        envs=envs,
+        config_file=config_file,
+        pipeline=pipeline,
+        dev=dev,
+        args=ctx.args if hasattr(ctx, "args") else None,
+    )
 
 
 @app.command()

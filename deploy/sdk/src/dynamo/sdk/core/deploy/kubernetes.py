@@ -27,6 +27,7 @@ from dynamo.sdk.core.protocol.deployment import (
 class KubernetesDeploymentManager(DeploymentManager):
     """
     Implementation of DeploymentManager that talks to the dynamo_store deployment API.
+    Accepts **kwargs for backend-specific options.
     """
 
     def __init__(self, endpoint: str):
@@ -34,9 +35,9 @@ class KubernetesDeploymentManager(DeploymentManager):
         self.session = requests.Session()
         self.namespace = "default"
 
-    def create_deployment(self, deployment: Deployment) -> str:
+    def create_deployment(self, deployment: Deployment, **kwargs) -> str:
+        """Create a new deployment. Ignores extra kwargs."""
         url = f"{self.endpoint}/api/v2/deployments"
-        # Map Deployment dataclass to CreateDeploymentSchema
         payload = {
             "name": deployment.name,
             "dynamo": deployment.namespace,  # This should reference the dynamo component or graph
@@ -46,7 +47,9 @@ class KubernetesDeploymentManager(DeploymentManager):
         resp.raise_for_status()
         return resp.json()["name"]
 
-    def update_deployment(self, deployment_id: str, deployment: Deployment) -> None:
+    def update_deployment(
+        self, deployment_id: str, deployment: Deployment, **kwargs
+    ) -> None:
         url = f"{self.endpoint}/api/v2/deployments/{deployment_id}"
         payload = {
             "name": deployment.name,
@@ -56,25 +59,25 @@ class KubernetesDeploymentManager(DeploymentManager):
         resp = self.session.put(url, json=payload)
         resp.raise_for_status()
 
-    def get_deployment(self, deployment_id: str) -> dict[str, t.Any]:
+    def get_deployment(self, deployment_id: str, **kwargs) -> dict[str, t.Any]:
         url = f"{self.endpoint}/api/v2/deployments/{deployment_id}"
         resp = self.session.get(url)
         resp.raise_for_status()
         return resp.json()
 
-    def list_deployments(self) -> list[dict[str, t.Any]]:
+    def list_deployments(self, **kwargs) -> list[dict[str, t.Any]]:
         url = f"{self.endpoint}/api/v2/deployments"
         resp = self.session.get(url)
         resp.raise_for_status()
         data = resp.json()
         return data.get("items", [])
 
-    def delete_deployment(self, deployment_id: str) -> None:
+    def delete_deployment(self, deployment_id: str, **kwargs) -> None:
         url = f"{self.endpoint}/api/v2/deployments/{deployment_id}"
         resp = self.session.delete(url)
         resp.raise_for_status()
 
-    def get_status(self, deployment_id: str) -> DeploymentStatus:
+    def get_status(self, deployment_id: str, **kwargs) -> DeploymentStatus:
         dep = self.get_deployment(deployment_id)
         status = dep.get("status", "unknown")
         # Map API status to DeploymentStatus enum
@@ -89,7 +92,9 @@ class KubernetesDeploymentManager(DeploymentManager):
         else:
             return DeploymentStatus.PENDING
 
-    def wait_until_ready(self, deployment_id: str, timeout: int = 3600) -> bool:
+    def wait_until_ready(
+        self, deployment_id: str, timeout: int = 3600, **kwargs
+    ) -> bool:
         import time
 
         start = time.time()
@@ -102,6 +107,6 @@ class KubernetesDeploymentManager(DeploymentManager):
             time.sleep(5)
         return False
 
-    def get_endpoint_urls(self, deployment_id: str) -> list[str]:
+    def get_endpoint_urls(self, deployment_id: str, **kwargs) -> list[str]:
         dep = self.get_deployment(deployment_id)
         return dep.get("urls", [])

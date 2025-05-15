@@ -36,23 +36,20 @@ class BentoCloudDeploymentManager(DeploymentManager):
     """
     Implementation of DeploymentManager that talks to the BentoCloud deployment API.
     Handles all BentoCloud-specific config parameter building, error handling, and API calls.
+    Accepts **kwargs for backend-specific options.
     """
 
     def __init__(self, endpoint: str):
         self.endpoint = endpoint.rstrip("/")
         self.console = console
 
-    def create_deployment(
-        self,
-        deployment: ProtocolDeployment,
-        wait: bool = True,
-        timeout: int = 3600,
-        envs: t.Optional[t.List[str]] = None,
-        config_file: t.Optional[t.IO] = None,
-        pipeline: t.Optional[str] = None,
-        dev: bool = False,
-        args: t.Optional[t.List[str]] = None,
-    ) -> str:
+    def create_deployment(self, deployment: ProtocolDeployment, **kwargs) -> str:
+        wait = kwargs.get("wait", True)
+        timeout = kwargs.get("timeout", 3600)
+        envs = kwargs.get("envs")
+        config_file = kwargs.get("config_file")
+        pipeline = kwargs.get("pipeline")
+        dev = kwargs.get("dev", False)
         # Load config from file and serialize to env
         service_configs = None
         if config_file:
@@ -123,12 +120,12 @@ class BentoCloudDeploymentManager(DeploymentManager):
                 sys.exit(1)
 
     def update_deployment(
-        self, deployment_id: str, deployment: ProtocolDeployment
+        self, deployment_id: str, deployment: ProtocolDeployment, **kwargs
     ) -> None:
         # Not implemented for BentoCloud in this example
         raise NotImplementedError
 
-    def get_deployment(self, deployment_id: str) -> dict[str, t.Any]:
+    def get_deployment(self, deployment_id: str, **kwargs) -> dict[str, t.Any]:
         _cloud_client = BentoMLContainer.bentocloud_client()
         with Spinner(console=self.console) as spinner:
             try:
@@ -150,7 +147,7 @@ class BentoCloudDeploymentManager(DeploymentManager):
                 spinner.log(f"[red]:x: Error:[/] Failed to get deployment: {error_msg}")
                 sys.exit(1)
 
-    def list_deployments(self) -> list[dict[str, t.Any]]:
+    def list_deployments(self, **kwargs) -> list[dict[str, t.Any]]:
         _cloud_client = BentoMLContainer.bentocloud_client()
         with Spinner(console=self.console) as spinner:
             try:
@@ -173,7 +170,7 @@ class BentoCloudDeploymentManager(DeploymentManager):
                 spinner.log(f"[red]:x: Error:[/] Failed to list deployments: {str(e)}")
                 sys.exit(1)
 
-    def delete_deployment(self, deployment_id: str) -> None:
+    def delete_deployment(self, deployment_id: str, **kwargs) -> None:
         _cloud_client = BentoMLContainer.bentocloud_client()
         with Spinner(console=self.console) as spinner:
             try:
@@ -188,7 +185,7 @@ class BentoCloudDeploymentManager(DeploymentManager):
                 spinner.log(f"[red]:x: Error:[/] {str(e)}")
                 sys.exit(1)
 
-    def get_status(self, deployment_id: str) -> DeploymentStatus:
+    def get_status(self, deployment_id: str, **kwargs) -> DeploymentStatus:
         dep = self.get_deployment(deployment_id)
         status = dep.get("status", "unknown")
         if status == "running":
@@ -202,7 +199,9 @@ class BentoCloudDeploymentManager(DeploymentManager):
         else:
             return DeploymentStatus.PENDING
 
-    def wait_until_ready(self, deployment_id: str, timeout: int = 3600) -> bool:
+    def wait_until_ready(
+        self, deployment_id: str, timeout: int = 3600, **kwargs
+    ) -> bool:
         # This is handled by the deployment_obj.wait_until_ready in create_deployment
         # Here, just poll status for generic interface
         import time
@@ -217,7 +216,7 @@ class BentoCloudDeploymentManager(DeploymentManager):
             time.sleep(5)
         return False
 
-    def get_endpoint_urls(self, deployment_id: str) -> list[str]:
+    def get_endpoint_urls(self, deployment_id: str, **kwargs) -> list[str]:
         dep = self.get_deployment(deployment_id)
         return dep.get("urls", [])
 
