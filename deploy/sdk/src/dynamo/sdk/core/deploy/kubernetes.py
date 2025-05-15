@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import sys
+import time
 import typing as t
 
 import requests
@@ -28,6 +30,7 @@ class KubernetesDeploymentManager(DeploymentManager):
     """
     Implementation of DeploymentManager that talks to the dynamo_store deployment API.
     Accepts **kwargs for backend-specific options.
+    Handles error reporting and payload construction according to the API schema.
     """
 
     def __init__(self, endpoint: str):
@@ -36,51 +39,138 @@ class KubernetesDeploymentManager(DeploymentManager):
         self.namespace = "default"
 
     def create_deployment(self, deployment: Deployment, **kwargs) -> str:
-        """Create a new deployment. Ignores extra kwargs."""
-        url = f"{self.endpoint}/api/v2/deployments"
+        """Create a new deployment."""
+        component = kwargs.get("pipeline") or deployment.namespace
+        name = deployment.name
+        dev = kwargs.get("dev", False)
+        envs = kwargs.get("envs")
+        labels = kwargs.get("labels")
+        secrets = kwargs.get("secrets")
+        services = kwargs.get("services", {})
+        access_authorization = kwargs.get("access_authorization", False)
+
         payload = {
-            "name": deployment.name,
-            "dynamo": deployment.namespace,  # This should reference the dynamo component or graph
-            # TODO: Map envs, services, etc. as needed
+            "name": name,
+            "component": component,
+            "dev": dev,
+            "envs": envs,
+            "labels": labels,
+            "secrets": secrets,
+            "services": services,
+            "access_authorization": access_authorization,
         }
-        resp = self.session.post(url, json=payload)
-        resp.raise_for_status()
-        return resp.json()["name"]
+        payload = {k: v for k, v in payload.items() if v is not None}
+        url = f"{self.endpoint}/api/v2/deployments"
+        try:
+            resp = self.session.post(url, json=payload)
+            resp.raise_for_status()
+            return resp.json().get("name", name)
+        except requests.HTTPError as e:
+            status = e.response.status_code if e.response else None
+            msg = e.response.text if e.response else str(e)
+            if status == 409:
+                print(f"Deployment '{name}' already exists.")
+            elif status in (400, 422):
+                print(f"Validation error: {msg}")
+            elif status == 404:
+                print(f"Endpoint not found: {url}")
+            elif status == 500:
+                print(f"Internal server error: {msg}")
+            else:
+                print(f"Failed to create deployment: {msg}")
+
+            sys.exit(1)
 
     def update_deployment(
         self, deployment_id: str, deployment: Deployment, **kwargs
     ) -> None:
-        url = f"{self.endpoint}/api/v2/deployments/{deployment_id}"
+        """Update an existing deployment."""
+        bento = kwargs.get("pipeline") or deployment.namespace
+        dev = kwargs.get("dev", False)
+        envs = kwargs.get("envs")
+        labels = kwargs.get("labels")
+        secrets = kwargs.get("secrets")
+        services = kwargs.get("services", {})
+        access_authorization = kwargs.get("access_authorization", False)
         payload = {
             "name": deployment.name,
-            "dynamo": deployment.namespace,
-            # TODO: Map envs, services, etc. as needed
+            "bento": bento,
+            "dev": dev,
+            "envs": envs,
+            "labels": labels,
+            "secrets": secrets,
+            "services": services,
+            "access_authorization": access_authorization,
         }
-        resp = self.session.put(url, json=payload)
-        resp.raise_for_status()
+        payload = {k: v for k, v in payload.items() if v is not None}
+        url = f"{self.endpoint}/api/v2/deployments/{deployment_id}"
+        try:
+            resp = self.session.put(url, json=payload)
+            resp.raise_for_status()
+        except requests.HTTPError as e:
+            status = e.response.status_code if e.response else None
+            msg = e.response.text if e.response else str(e)
+            if status == 404:
+                print(f"Deployment '{deployment_id}' not found.")
+            elif status in (400, 422):
+                print(f"Validation error: {msg}")
+            elif status == 500:
+                print(f"Internal server error: {msg}")
+            else:
+                print(f"Failed to update deployment: {msg}")
+
+            sys.exit(1)
 
     def get_deployment(self, deployment_id: str, **kwargs) -> dict[str, t.Any]:
+        """Get deployment details."""
         url = f"{self.endpoint}/api/v2/deployments/{deployment_id}"
-        resp = self.session.get(url)
-        resp.raise_for_status()
-        return resp.json()
+        try:
+            resp = self.session.get(url)
+            resp.raise_for_status()
+            return resp.json()
+        except requests.HTTPError as e:
+            status = e.response.status_code if e.response else None
+            msg = e.response.text if e.response else str(e)
+            if status == 404:
+                print(f"Deployment '{deployment_id}' not found.")
+            else:
+                print(f"Failed to get deployment: {msg}")
+            sys.exit(1)
 
     def list_deployments(self, **kwargs) -> list[dict[str, t.Any]]:
+        """List all deployments."""
         url = f"{self.endpoint}/api/v2/deployments"
-        resp = self.session.get(url)
-        resp.raise_for_status()
-        data = resp.json()
-        return data.get("items", [])
+        try:
+            resp = self.session.get(url)
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("items", [])
+        except requests.HTTPError as e:
+            # status = e.response.status_code if e.response else None
+            msg = e.response.text if e.response else str(e)
+            print(f"Failed to list deployments: {msg}")
+
+            sys.exit(1)
 
     def delete_deployment(self, deployment_id: str, **kwargs) -> None:
+        """Delete a deployment."""
         url = f"{self.endpoint}/api/v2/deployments/{deployment_id}"
-        resp = self.session.delete(url)
-        resp.raise_for_status()
+        try:
+            resp = self.session.delete(url)
+            resp.raise_for_status()
+        except requests.HTTPError as e:
+            status = e.response.status_code if e.response else None
+            msg = e.response.text if e.response else str(e)
+            if status == 404:
+                print(f"Deployment '{deployment_id}' not found.")
+            else:
+                print(f"Failed to delete deployment: {msg}")
+
+            sys.exit(1)
 
     def get_status(self, deployment_id: str, **kwargs) -> DeploymentStatus:
         dep = self.get_deployment(deployment_id)
         status = dep.get("status", "unknown")
-        # Map API status to DeploymentStatus enum
         if status == "running":
             return DeploymentStatus.RUNNING
         elif status == "failed":
@@ -95,8 +185,6 @@ class KubernetesDeploymentManager(DeploymentManager):
     def wait_until_ready(
         self, deployment_id: str, timeout: int = 3600, **kwargs
     ) -> bool:
-        import time
-
         start = time.time()
         while time.time() - start < timeout:
             status = self.get_status(deployment_id)
