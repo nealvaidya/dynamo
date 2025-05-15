@@ -217,7 +217,7 @@ impl<S: Storage, M: BlockMetadata> Block<S, M> {
 
     /// Get the number of blocks in the block
     pub fn num_blocks(&self) -> usize {
-        self.data.layout.num_blocks()
+        1
     }
 
     /// Get the number of layers in the block
