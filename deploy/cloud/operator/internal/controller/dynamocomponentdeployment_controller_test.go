@@ -904,7 +904,8 @@ func TestDynamoComponentDeploymentReconciler_generateLeaderWorkerSet(t *testing.
 					},
 				},
 				Spec: leaderworkersetv1.LeaderWorkerSetSpec{
-					Replicas: ptr.To(int32(1)),
+					Replicas:      ptr.To(int32(1)),
+					StartupPolicy: leaderworkersetv1.LeaderCreatedStartupPolicy,
 					LeaderWorkerTemplate: leaderworkersetv1.LeaderWorkerTemplate{
 						Size: ptr.To(int32(2)),
 						LeaderTemplate: &corev1.PodTemplateSpec{

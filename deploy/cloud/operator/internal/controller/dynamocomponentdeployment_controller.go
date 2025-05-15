@@ -698,7 +698,8 @@ func (r *DynamoComponentDeploymentReconciler) generateLeaderWorkerSet(ctx contex
 	groupSize := int32(sizeInt)
 
 	leaderWorkerSet.Spec = leaderworkersetv1.LeaderWorkerSetSpec{
-		Replicas: &singleReplica,
+		Replicas:      &singleReplica,
+		StartupPolicy: leaderworkersetv1.LeaderCreatedStartupPolicy,
 		LeaderWorkerTemplate: leaderworkersetv1.LeaderWorkerTemplate{
 			LeaderTemplate: leaderPodTemplateSpec,
 			WorkerTemplate: *workerPodTemplateSpec,
