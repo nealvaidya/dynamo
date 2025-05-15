@@ -353,36 +353,36 @@ impl Client {
             loop {
                 tokio::select! {
                     maybe_resp = watch_stream.next() => {
-                        match maybe_resp {
-                            Some(Ok(response)) => {
-                                for event in response.events() {
-                                    match event.event_type() {
-                                        etcd_client::EventType::Put => {
-                                            if let Some(kv) = event.kv() {
-                                                if let Err(err) = tx.send(WatchEvent::Put(kv.clone())).await {
-                                                    tracing::error!(
-                                                        "kv watcher error forwarding WatchEvent::Put: {err}"
-                                                    );
-                                                    // receiver is closed → shut everything down
-                                                    return;
-                                                }
-                                            }
-                                        }
-                                        etcd_client::EventType::Delete => {
-                                            if let Some(kv) = event.kv() {
-                                                if tx.send(WatchEvent::Delete(kv.clone())).await.is_err() {
-                                                    // receiver is closed
-                                                    return;
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            // the stream ended or errored out
+                        // Early return for None or Err cases
+                        let response = match maybe_resp {
+                            Some(Ok(response)) => response,
                             _ => {
                                 tracing::info!("kv watch stream closed");
                                 return;
+                            }
+                        };
+
+                        // Process events
+                        for event in response.events() {
+                            // Extract the KeyValue if it exists
+                            let kv = match event.kv() {
+                                Some(kv) => kv.clone(),
+                                None => continue, // Skip events with no KV
+                            };
+
+                            // Handle based on event type
+                            match event.event_type() {
+                                etcd_client::EventType::Put => {
+                                    if let Err(err) = tx.send(WatchEvent::Put(kv)).await {
+                                        tracing::error!("kv watcher error forwarding WatchEvent::Put: {err}");
+                                        return;
+                                    }
+                                }
+                                etcd_client::EventType::Delete => {
+                                    if tx.send(WatchEvent::Delete(kv)).await.is_err() {
+                                        return;
+                                    }
+                                }
                             }
                         }
                     }
