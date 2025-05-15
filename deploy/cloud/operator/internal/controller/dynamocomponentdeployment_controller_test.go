@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/ai-dynamo/dynamo/deploy/cloud/operator/api/dynamo/common"
 	"github.com/ai-dynamo/dynamo/deploy/cloud/operator/api/v1alpha1"
 	commonconsts "github.com/ai-dynamo/dynamo/deploy/cloud/operator/internal/consts"
 	"github.com/ai-dynamo/dynamo/deploy/cloud/operator/internal/controller_common"
@@ -848,7 +849,7 @@ func TestDynamoComponentDeploymentReconciler_generateLeaderWorkerSet(t *testing.
 		wantErr bool
 	}{
 		{
-			name: "happy path",
+			name: "generateLeaderWorkerSet - nominal case",
 			fields: fields{
 				Recorder: record.NewFakeRecorder(100),
 				Config:   controller_common.Config{}, // Provide default or test-specific config
@@ -870,6 +871,11 @@ func TestDynamoComponentDeploymentReconciler_generateLeaderWorkerSet(t *testing.
 								Annotations: map[string]string{
 									"nvidia.com/deployment-type": "leader-worker",
 									"nvidia.com/lws-size":        "2",
+								},
+								Resources: &common.Resources{
+									Limits: &common.ResourceItem{
+										GPU: "1",
+									},
 								},
 							},
 						},
@@ -921,8 +927,39 @@ func TestDynamoComponentDeploymentReconciler_generateLeaderWorkerSet(t *testing.
 								},
 							},
 							Spec: corev1.PodSpec{
-								SchedulerName:      "volcano",
-								Containers:         []corev1.Container{{Name: "main", Image: "test-image:latest", Command: []string{"sh", "-c"}, Args: []string{"ray start --head --port=6379 && cd src && uv run dynamo serve --service-name test-lws-deploy-service test-tag --test-lws-deploy-service.ServiceArgs.dynamo.namespace=default --test-lws-deploy-service.environment=kubernetes"}, Env: []corev1.EnvVar{{Name: "DYNAMO_PORT", Value: "3000"}}, VolumeMounts: []corev1.VolumeMount{{Name: "shared-memory", MountPath: "/dev/shm"}}, Ports: []corev1.ContainerPort{{Protocol: corev1.ProtocolTCP, Name: "http", ContainerPort: 3000}}, TTY: true, Stdin: true, Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("300m"), corev1.ResourceMemory: resource.MustParse("500Mi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("500m"), corev1.ResourceMemory: resource.MustParse("1Gi")}}}},
+								SchedulerName: "volcano",
+								Containers: []corev1.Container{
+									{
+										Name:    "main",
+										Image:   "test-image:latest",
+										Command: []string{"sh", "-c"},
+										Args:    []string{"ray start --head --port=6379 --num-gpus=1 && cd src && uv run dynamo serve --service-name test-lws-deploy-service test-tag --test-lws-deploy-service.ServiceArgs.dynamo.namespace=default --test-lws-deploy-service.environment=kubernetes"},
+										Env:     []corev1.EnvVar{{Name: "DYNAMO_PORT", Value: "3000"}},
+										VolumeMounts: []corev1.VolumeMount{
+											{
+												Name: "shared-memory", MountPath: "/dev/shm",
+											},
+										},
+										Ports: []corev1.ContainerPort{
+											{
+												Protocol: corev1.ProtocolTCP, Name: "http", ContainerPort: 3000,
+											},
+										},
+										TTY:   true,
+										Stdin: true,
+										Resources: corev1.ResourceRequirements{
+											Requests: corev1.ResourceList{
+												corev1.ResourceCPU:    resource.MustParse("300m"),
+												corev1.ResourceMemory: resource.MustParse("500Mi"),
+											},
+											Limits: corev1.ResourceList{
+												corev1.ResourceCPU:    resource.MustParse("500m"),
+												corev1.ResourceMemory: resource.MustParse("1Gi"),
+												"nvidia.com/gpu":      resource.MustParse("1"),
+											},
+										},
+									},
+								},
 								Volumes:            []corev1.Volume{{Name: "shared-memory", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory, SizeLimit: limit}}}},
 								ImagePullSecrets:   []corev1.LocalObjectReference{{Name: ""}}, // Assuming default config gives empty secret name
 								ServiceAccountName: "default-test-sa",                         // Updated to reflect mocked SA
@@ -941,8 +978,24 @@ func TestDynamoComponentDeploymentReconciler_generateLeaderWorkerSet(t *testing.
 								},
 							},
 							Spec: corev1.PodSpec{
-								SchedulerName:      "volcano",
-								Containers:         []corev1.Container{{Name: "main", Image: "test-image:latest", Command: []string{"sh", "-c"}, Args: []string{"ray start --address=$(LWS_LEADER_ADDRESS):6379 && cd src && uv run dynamo serve --service-name test-lws-deploy-service test-tag --test-lws-deploy-service.ServiceArgs.dynamo.namespace=default --test-lws-deploy-service.environment=kubernetes"}, Env: []corev1.EnvVar{{Name: "DYNAMO_PORT", Value: "3000"}}, VolumeMounts: []corev1.VolumeMount{{Name: "shared-memory", MountPath: "/dev/shm"}}, Ports: []corev1.ContainerPort{{Protocol: corev1.ProtocolTCP, Name: "http", ContainerPort: 3000}}, TTY: true, Stdin: true, Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("300m"), corev1.ResourceMemory: resource.MustParse("500Mi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("500m"), corev1.ResourceMemory: resource.MustParse("1Gi")}}}},
+								SchedulerName: "volcano",
+								Containers: []corev1.Container{
+									{
+										Name:         "main",
+										Image:        "test-image:latest",
+										Command:      []string{"sh", "-c"},
+										Args:         []string{"ray start --address=$(LWS_LEADER_ADDRESS):6379 --num-gpus=1 && cd src && uv run dynamo serve --service-name test-lws-deploy-service test-tag --test-lws-deploy-service.ServiceArgs.dynamo.namespace=default --test-lws-deploy-service.environment=kubernetes"},
+										Env:          []corev1.EnvVar{{Name: "DYNAMO_PORT", Value: "3000"}},
+										VolumeMounts: []corev1.VolumeMount{{Name: "shared-memory", MountPath: "/dev/shm"}},
+										Ports:        []corev1.ContainerPort{{Protocol: corev1.ProtocolTCP, Name: "http", ContainerPort: 3000}},
+										TTY:          true,
+										Stdin:        true,
+										Resources: corev1.ResourceRequirements{
+											Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("300m"), corev1.ResourceMemory: resource.MustParse("500Mi")},
+											Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("500m"), corev1.ResourceMemory: resource.MustParse("1Gi"), "nvidia.com/gpu": resource.MustParse("1")},
+										},
+									},
+								},
 								Volumes:            []corev1.Volume{{Name: "shared-memory", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory, SizeLimit: limit}}}},
 								ImagePullSecrets:   []corev1.LocalObjectReference{{Name: ""}},
 								ServiceAccountName: "default-test-sa", // Updated to reflect mocked SA
@@ -966,7 +1019,13 @@ func TestDynamoComponentDeploymentReconciler_generateLeaderWorkerSet(t *testing.
 						ObjectMeta: metav1.ObjectMeta{Name: "test-lws-nil-id", Namespace: "default", Annotations: map[string]string{KubeAnnotationLWSSize: "2"}},
 						Spec: v1alpha1.DynamoComponentDeploymentSpec{
 							DynamoComponent: "test-comp", DynamoTag: "test",
-							DynamoComponentDeploymentSharedSpec: v1alpha1.DynamoComponentDeploymentSharedSpec{},
+							DynamoComponentDeploymentSharedSpec: v1alpha1.DynamoComponentDeploymentSharedSpec{
+								Resources: &common.Resources{
+									Limits: &common.ResourceItem{
+										GPU: "1",
+									},
+								},
+							},
 						},
 					},
 					dynamoComponent: &v1alpha1.DynamoComponent{
@@ -1000,7 +1059,13 @@ func TestDynamoComponentDeploymentReconciler_generateLeaderWorkerSet(t *testing.
 						ObjectMeta: metav1.ObjectMeta{Name: "test-lws-leader-err", Namespace: "default", Annotations: map[string]string{KubeAnnotationLWSSize: "2"}},
 						Spec: v1alpha1.DynamoComponentDeploymentSpec{
 							DynamoComponent: "test-comp", DynamoTag: "test",
-							DynamoComponentDeploymentSharedSpec: v1alpha1.DynamoComponentDeploymentSharedSpec{},
+							DynamoComponentDeploymentSharedSpec: v1alpha1.DynamoComponentDeploymentSharedSpec{
+								Resources: &common.Resources{
+									Limits: &common.ResourceItem{
+										GPU: "1",
+									},
+								},
+							},
 						},
 					},
 					dynamoComponent: &v1alpha1.DynamoComponent{ // Image is missing, will cause error in generatePodTemplateSpec
