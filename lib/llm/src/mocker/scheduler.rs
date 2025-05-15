@@ -133,12 +133,12 @@ impl Scheduler {
                     _ = schedule_interval.tick() => {
                         let mut state_guard = state_clone.lock().await;
 
-                        // Skip if no waiting requests
-                        if state_guard.waiting_requests.is_empty() {
-                            continue;
-                        }
+                        // Skip if no waiting requests or get the front request
+                        let request = match state_guard.waiting_requests.front() {
+                            Some((_, request)) => request,
+                            None => continue,
+                        };
 
-                        let (_, request) = state_guard.waiting_requests.front().unwrap();
                         let mut active_tokens_guard = active_tokens_clone.lock().await;
                         let current_token_usage: usize = active_tokens_guard.values().sum();
 
