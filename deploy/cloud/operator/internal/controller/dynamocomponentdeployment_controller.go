@@ -274,7 +274,7 @@ func (r *DynamoComponentDeploymentReconciler) Reconcile(ctx context.Context, req
 					dynamoComponent:                         dynamoComponentCR,
 					isStealingTrafficDebugModeEnabled:       false,
 					containsStealingTrafficDebugModeEnabled: false,
-					instanceID:                              i,
+					instanceID:                              &i,
 				})
 			})
 
@@ -292,7 +292,7 @@ func (r *DynamoComponentDeploymentReconciler) Reconcile(ctx context.Context, req
 					dynamoComponent:                         dynamoComponentCR,
 					isStealingTrafficDebugModeEnabled:       false,
 					containsStealingTrafficDebugModeEnabled: false,
-					instanceID:                              i,
+					instanceID:                              &i,
 				})
 			})
 
@@ -512,39 +512,44 @@ func (r *DynamoComponentDeploymentReconciler) generateVolcanoPodGroup(ctx contex
 	logs := log.FromContext(ctx)
 	logs.Info("Generating Volcano PodGroup")
 
+	if opt.instanceID == nil {
+		return nil, false, errors.New("generateVolcanoPodGroup: instanceID cannot be nil")
+	}
+	instanceID := *opt.instanceID
+
+	if instanceID < 0 {
+		return nil, false, fmt.Errorf("generateVolcanoPodGroup: instanceID cannot be negative, got %d", instanceID)
+	}
+
 	podGroupName := r.getKubeName(opt.dynamoComponentDeployment, opt.dynamoComponent, opt.isStealingTrafficDebugModeEnabled)
-	instanceID := opt.instanceID
 	podGroupName = fmt.Sprintf("%s-%d", podGroupName, instanceID)
 
 	kubeNs := opt.dynamoComponentDeployment.Namespace
-	labels := r.getKubeLabels(opt.dynamoComponentDeployment, opt.dynamoComponent)
-	annotations := r.getKubeAnnotations(opt.dynamoComponentDeployment, opt.dynamoComponent)
 
-	if labels == nil {
-		labels = make(map[string]string)
-	}
+	labels := make(map[string]string)
 	labels["instance-id"] = fmt.Sprintf("%d", instanceID)
 
-	// Get minMember from LWS size annotation
-	lwsSizeStr, ok := annotations[KubeAnnotationLWSSize]
+	lwsSizeStr, ok := opt.dynamoComponentDeployment.Spec.Annotations[KubeAnnotationLWSSize]
 	if !ok {
-		return nil, false, fmt.Errorf("missing required annotation %s", KubeAnnotationLWSSize)
+		return nil, false, fmt.Errorf("generateVolcanoPodGroup: missing required annotation %s", KubeAnnotationLWSSize)
 	}
 	lwsSize, err := strconv.ParseInt(lwsSizeStr, 10, 32)
 	if err != nil {
-		return nil, false, fmt.Errorf("invalid value for annotation %s: %v", KubeAnnotationLWSSize, err)
+		return nil, false, fmt.Errorf("generateVolcanoPodGroup: invalid value for annotation %s: %v", KubeAnnotationLWSSize, err)
 	}
-	if lwsSize < 1 {
-		return nil, false, fmt.Errorf("LWS size must be greater than 0, got %d", lwsSize)
+	if lwsSize <= 0 {
+		return nil, false, fmt.Errorf("generateVolcanoPodGroup: LWS size must be greater than 0, got %d", lwsSize)
+	}
+	if lwsSize == 1 {
+		return nil, false, errors.New("generateVolcanoPodGroup: LWS size of 1 means that the LWS is not needed, change 'nvidia.com/deployment-type' to 'standard'/disable whatever flag you used to enable LWS")
 	}
 	minMember := int32(lwsSize)
 
 	podGroup := &volcanov1beta1.PodGroup{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        podGroupName,
-			Namespace:   kubeNs,
-			Labels:      labels,
-			Annotations: annotations,
+			Name:      podGroupName,
+			Namespace: kubeNs,
+			Labels:    labels,
 		},
 		Spec: volcanov1beta1.PodGroupSpec{
 			MinMember: minMember,
@@ -554,41 +559,15 @@ func (r *DynamoComponentDeploymentReconciler) generateVolcanoPodGroup(ctx contex
 	return podGroup, false, nil
 }
 
-// generateLeaderWorkerSet creates a LeaderWorkerSet resource from the DynamoComponentDeployment
-func (r *DynamoComponentDeploymentReconciler) generateLeaderWorkerSet(ctx context.Context, opt generateResourceOption) (*leaderworkersetv1.LeaderWorkerSet, bool, error) {
-	logs := log.FromContext(ctx)
-	logs.Info("Generating LeaderWorkerSet")
-
-	// Extract the instance index from the name if it exists
-	kubeName := r.getKubeName(opt.dynamoComponentDeployment, opt.dynamoComponent, opt.isStealingTrafficDebugModeEnabled)
-	instanceID := opt.instanceID
-	kubeName = fmt.Sprintf("%s-%d", kubeName, instanceID)
-
-	kubeNs := opt.dynamoComponentDeployment.Namespace
-	labels := r.getKubeLabels(opt.dynamoComponentDeployment, opt.dynamoComponent)
-	annotations := r.getKubeAnnotations(opt.dynamoComponentDeployment, opt.dynamoComponent)
-
-	// Add instance identifier to labels
-	if labels == nil {
-		labels = make(map[string]string)
-	}
-	labels["instance-id"] = fmt.Sprintf("%d", instanceID)
-
-	leaderWorkerSet := &leaderworkersetv1.LeaderWorkerSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        kubeName,
-			Namespace:   kubeNs,
-			Labels:      labels,
-			Annotations: annotations,
-		},
-	}
-
+func (r *DynamoComponentDeploymentReconciler) generateLeaderPodTemplateSpec(ctx context.Context, opt generateResourceOption, kubeName string, labels map[string]string, instanceID int) (*corev1.PodTemplateSpec, error) {
 	leaderPodTemplateSpec, err := r.generatePodTemplateSpec(ctx, opt)
 	if err != nil {
-		return nil, false, errors.Wrap(err, "failed to generate leader pod template")
+		return nil, errors.Wrap(err, "failed to generate leader pod template")
 	}
 
-	if leaderPodTemplateSpec.ObjectMeta.Labels == nil {
+	if labels != nil {
+		leaderPodTemplateSpec.ObjectMeta.Labels = labels
+	} else {
 		leaderPodTemplateSpec.ObjectMeta.Labels = make(map[string]string)
 	}
 	leaderPodTemplateSpec.ObjectMeta.Labels["role"] = "leader"
@@ -603,22 +582,28 @@ func (r *DynamoComponentDeploymentReconciler) generateLeaderWorkerSet(ctx contex
 	leaderPodTemplateSpec.Spec.SchedulerName = "volcano"
 
 	if leaderPodTemplateSpec.Spec.Containers[0].Command == nil {
-		return nil, false, errors.New("container Command cannot be nil for Ray leader pod")
+		return nil, errors.New("generateLeaderPodTemplateSpec: container Command cannot be nil for Ray leader pod")
 	}
 
 	if len(leaderPodTemplateSpec.Spec.Containers[0].Args) == 0 {
-		return nil, false, errors.New("container Args cannot be empty for Ray leader pod")
+		return nil, errors.New("generateLeaderPodTemplateSpec: container Args cannot be empty for Ray leader pod")
 	}
 
 	currentArgs := leaderPodTemplateSpec.Spec.Containers[0].Args[0]
 	leaderPodTemplateSpec.Spec.Containers[0].Args[0] = "ray start --head --port=6379 && " + currentArgs
 
+	return leaderPodTemplateSpec, nil
+}
+
+func (r *DynamoComponentDeploymentReconciler) generateWorkerPodTemplateSpec(ctx context.Context, opt generateResourceOption, kubeName string, labels map[string]string, instanceID int) (*corev1.PodTemplateSpec, error) {
 	workerPodTemplateSpec, err := r.generatePodTemplateSpec(ctx, opt)
 	if err != nil {
-		return nil, false, errors.Wrap(err, "failed to generate worker pod template")
+		return nil, errors.Wrap(err, "failed to generate worker pod template")
 	}
 
-	if workerPodTemplateSpec.ObjectMeta.Labels == nil {
+	if labels != nil {
+		workerPodTemplateSpec.ObjectMeta.Labels = labels
+	} else {
 		workerPodTemplateSpec.ObjectMeta.Labels = make(map[string]string)
 	}
 	workerPodTemplateSpec.ObjectMeta.Labels["role"] = "worker"
@@ -633,28 +618,82 @@ func (r *DynamoComponentDeploymentReconciler) generateLeaderWorkerSet(ctx contex
 	workerPodTemplateSpec.ObjectMeta.Annotations["scheduling.k8s.io/group-name"] = kubeName
 
 	if workerPodTemplateSpec.Spec.Containers[0].Command == nil {
-		return nil, false, errors.New("container Command cannot be nil for Ray worker pod")
+		return nil, errors.New("generateWorkerPodTemplateSpec: container Command cannot be nil for Ray worker pod")
 	}
 
 	if len(workerPodTemplateSpec.Spec.Containers[0].Args) == 0 {
-		return nil, false, errors.New("container Args cannot be empty for Ray worker pod")
+		return nil, errors.New("generateWorkerPodTemplateSpec: container Args cannot be empty for Ray worker pod")
 	}
 
-	currentArgs = workerPodTemplateSpec.Spec.Containers[0].Args[0]
+	currentArgs := workerPodTemplateSpec.Spec.Containers[0].Args[0]
 	workerPodTemplateSpec.Spec.Containers[0].Args[0] = "ray start --address=$(LWS_LEADER_ADDRESS):6379 && " + currentArgs
+
+	return workerPodTemplateSpec, nil
+}
+
+// generateLeaderWorkerSet creates a LeaderWorkerSet resource from the DynamoComponentDeployment
+func (r *DynamoComponentDeploymentReconciler) generateLeaderWorkerSet(ctx context.Context, opt generateResourceOption) (*leaderworkersetv1.LeaderWorkerSet, bool, error) {
+	logs := log.FromContext(ctx)
+	logs.Info("Generating LeaderWorkerSet")
+
+	if opt.instanceID == nil {
+		return nil, false, errors.New("generateLeaderWorkerSet: instanceID cannot be nil")
+	}
+	instanceID := *opt.instanceID
+
+	if instanceID < 0 {
+		return nil, false, fmt.Errorf("generateLeaderWorkerSet: instanceID cannot be negative, got %d", instanceID)
+	}
+
+	kubeName := r.getKubeName(opt.dynamoComponentDeployment, opt.dynamoComponent, opt.isStealingTrafficDebugModeEnabled)
+	kubeName = fmt.Sprintf("%s-%d", kubeName, instanceID)
+
+	kubeNs := opt.dynamoComponentDeployment.Namespace
+	labels := r.getKubeLabels(opt.dynamoComponentDeployment, opt.dynamoComponent)
+
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+	labels["instance-id"] = fmt.Sprintf("%d", instanceID)
+
+	leaderWorkerSet := &leaderworkersetv1.LeaderWorkerSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      kubeName,
+			Namespace: kubeNs,
+			Labels:    labels,
+		},
+	}
+
+	leaderPodLabels := make(map[string]string)
+	for k, v := range labels {
+		leaderPodLabels[k] = v
+	}
+	leaderPodTemplateSpec, err := r.generateLeaderPodTemplateSpec(ctx, opt, kubeName, leaderPodLabels, instanceID)
+	if err != nil {
+		return nil, false, errors.Wrap(err, "generateLeaderWorkerSet: failed to generate leader pod template")
+	}
+
+	workerPodLabels := make(map[string]string)
+	for k, v := range labels {
+		workerPodLabels[k] = v
+	}
+	workerPodTemplateSpec, err := r.generateWorkerPodTemplateSpec(ctx, opt, kubeName, workerPodLabels, instanceID)
+	if err != nil {
+		return nil, false, errors.Wrap(err, "generateLeaderWorkerSet: failed to generate worker pod template")
+	}
 
 	// Each individual LeaderWorkerSet always has exactly 1 replica
 	singleReplica := int32(1)
-	size, ok := opt.dynamoComponentDeployment.ObjectMeta.Annotations[KubeAnnotationLWSSize]
+	size, ok := opt.dynamoComponentDeployment.Spec.Annotations[KubeAnnotationLWSSize]
 	if !ok {
-		return nil, false, fmt.Errorf("LWS size annotation '%s' is required", KubeAnnotationLWSSize)
+		return nil, false, fmt.Errorf("generateLeaderWorkerSet: LWS size annotation '%s' is required", KubeAnnotationLWSSize)
 	}
 	sizeInt, err := strconv.ParseInt(size, 10, 32)
 	if err != nil {
-		return nil, false, errors.Wrap(err, "LWS size annotation value must be an integer")
+		return nil, false, errors.Wrap(err, "generateLeaderWorkerSet: LWS size annotation value must be an integer")
 	}
 	if sizeInt < 1 {
-		return nil, false, fmt.Errorf("LWS size must be greater than 0, got %d", sizeInt)
+		return nil, false, fmt.Errorf("generateLeaderWorkerSet: LWS size must be greater than 0, got %d", sizeInt)
 	}
 	groupSize := int32(sizeInt)
 
@@ -1212,7 +1251,7 @@ type generateResourceOption struct {
 	containsStealingTrafficDebugModeEnabled bool
 	isDebugPodReceiveProductionTraffic      bool
 	isGenericService                        bool
-	instanceID                              int
+	instanceID                              *int
 }
 
 func (r *DynamoComponentDeploymentReconciler) generateHPA(opt generateResourceOption) (*autoscalingv2.HorizontalPodAutoscaler, bool, error) {
@@ -1285,7 +1324,7 @@ func (r *DynamoComponentDeploymentReconciler) generatePodTemplateSpec(ctx contex
 		podLabels[commonconsts.KubeLabelDynamoDeploymentTargetType] = DeploymentTargetTypeDebug
 	}
 
-	podAnnotations := r.getKubeAnnotations(opt.dynamoComponentDeployment, opt.dynamoComponent)
+	podAnnotations := make(map[string]string)
 
 	kubeName := r.getKubeName(opt.dynamoComponentDeployment, opt.dynamoComponent, opt.isStealingTrafficDebugModeEnabled)
 
