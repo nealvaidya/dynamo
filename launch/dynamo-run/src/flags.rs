@@ -184,7 +184,7 @@ impl Flags {
     }
 }
 
-#[derive(Default, PartialEq, Eq, ValueEnum, Clone, Debug)]
+#[derive(Default, PartialEq, Eq, ValueEnum, Clone, Debug, Copy)]
 pub enum RouterMode {
     #[default]
     Random,
@@ -194,18 +194,12 @@ pub enum RouterMode {
     KV,
 }
 
-impl RouterMode {
-    pub fn is_kv_routing(&self) -> bool {
-        *self == RouterMode::KV
-    }
-}
-
 impl From<RouterMode> for RuntimeRouterMode {
     fn from(r: RouterMode) -> RuntimeRouterMode {
         match r {
             RouterMode::RoundRobin => RuntimeRouterMode::RoundRobin,
-            RouterMode::KV => todo!("KV not implemented yet"),
-            _ => RuntimeRouterMode::Random,
+            RouterMode::Random => RuntimeRouterMode::Random,
+            RouterMode::KV => RuntimeRouterMode::KV,
         }
     }
 }
