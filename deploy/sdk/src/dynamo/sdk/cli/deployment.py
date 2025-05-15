@@ -320,7 +320,7 @@ def delete(
         raise typer.Exit(1)
 
 
-def deploy_command(
+def deploy(
     ctx: typer.Context,
     pipeline: t.Optional[str] = typer.Argument(None, help="Dynamo pipeline to deploy"),
     name: t.Optional[str] = typer.Option(None, "--name", "-n", help="Deployment name"),

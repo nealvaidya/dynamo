@@ -17,13 +17,22 @@ import json
 import logging
 import typing as t
 
+from bentoml._internal.cloud import BentoCloudClient
+from bentoml._internal.cloud.client import RestApiClient
+from bentoml._internal.cloud.config import CloudClientConfig, CloudClientContext
 from bentoml._internal.cloud.deployment import DeploymentConfigParameters
 from bentoml._internal.configuration.containers import BentoMLContainer
-from bentoml.exceptions import BentoMLException
+from bentoml.exceptions import BentoMLException, CLIException, CloudRESTApiClientError
 from rich.console import Console
 
+from dynamo.runtime.logging import configure_dynamo_logging
 from dynamo.sdk.core.protocol.deployment import Deployment as ProtocolDeployment
 from dynamo.sdk.core.protocol.deployment import DeploymentManager, DeploymentStatus
+
+# Configure logging to suppress INFO HTTP logs
+logging.getLogger("httpx").setLevel(logging.WARNING)  # HTTP client library logs
+logging.getLogger("httpcore").setLevel(logging.WARNING)  # HTTP core library logs
+configure_dynamo_logging()
 
 logger = logging.getLogger(__name__)
 console = Console(highlight=False)
@@ -39,6 +48,52 @@ class BentoCloudDeploymentManager(DeploymentManager):
 
     def __init__(self, endpoint: str):
         self.endpoint = endpoint.rstrip("/")
+        self._cloud_client = self._login_to_cloud()
+
+    def _login_to_cloud(self) -> "BentoCloudClient":
+        """Connect to Dynamo Cloud and return an authenticated BentoCloudClient."""
+        try:
+            logger.info(f"Running against Dynamo Cloud at {self.endpoint}")
+            api_token = ""  # Using empty string for now as it's not used
+            cloud_rest_client = RestApiClient(self.endpoint, api_token)
+            user = cloud_rest_client.v1.get_current_user()
+            if user is None:
+                raise CLIException("current user is not found")
+            org = cloud_rest_client.v1.get_current_organization()
+            if org is None:
+                raise CLIException("current organization is not found")
+            current_context_name = CloudClientConfig.get_config().current_context_name
+            cloud_context = BentoMLContainer.cloud_context.get()
+            ctx = CloudClientContext(
+                name=cloud_context
+                if cloud_context is not None
+                else current_context_name,
+                endpoint=self.endpoint,
+                api_token=api_token,
+                email=user.email,
+            )
+            ctx.save()
+            logger.debug(
+                f"Configured Dynamo Cloud credentials (current-context: {ctx.name})"
+            )
+            logger.debug(f"Logged in as {user.email} at {org.name} organization")
+
+            return BentoCloudClient(endpoint=self.endpoint, api_key=api_token)
+        except CloudRESTApiClientError as e:
+            if e.error_code == 401:
+                console.print(
+                    f":police_car_light: Error validating token: HTTP 401: Bad credentials ({self.endpoint}/api-token)"
+                )
+            else:
+                console.print(
+                    f":police_car_light: Error validating token: HTTP {e.error_code}"
+                )
+            raise BentoMLException(f"Failed to login to Dynamo Cloud: {str(e)}") from e
+        except Exception as e:
+            console.print(
+                f":police_car_light: Error connecting to Dynamo Cloud: {str(e)}"
+            )
+            raise BentoMLException(f"Failed to login to Dynamo Cloud: {str(e)}") from e
 
     def create_deployment(self, deployment: ProtocolDeployment, **kwargs) -> str:
         wait = kwargs.get("wait", True)
@@ -47,7 +102,6 @@ class BentoCloudDeploymentManager(DeploymentManager):
         config_file = kwargs.get("config_file")
         pipeline = kwargs.get("pipeline")
         dev = kwargs.get("dev", False)
-        # args = kwargs.get("args")
         service_configs = None
         if config_file:
             try:
@@ -79,8 +133,7 @@ class BentoCloudDeploymentManager(DeploymentManager):
         except BentoMLException as e:
             raise RuntimeError((400, f"Config verification error: {str(e)}", None))
         try:
-            _cloud_client = BentoMLContainer.bentocloud_client()
-            deployment_obj = _cloud_client.deployment.create(
+            deployment_obj = self._cloud_client.deployment.create(
                 deployment_config_params=config_params
             )
             if wait:
@@ -103,8 +156,7 @@ class BentoCloudDeploymentManager(DeploymentManager):
 
     def get_deployment(self, deployment_id: str, **kwargs) -> dict[str, t.Any]:
         try:
-            _cloud_client = BentoMLContainer.bentocloud_client()
-            deployment_obj = _cloud_client.deployment.get(name=deployment_id)
+            deployment_obj = self._cloud_client.deployment.get(name=deployment_id)
             return (
                 deployment_obj.to_dict()
                 if hasattr(deployment_obj, "to_dict")
@@ -116,8 +168,7 @@ class BentoCloudDeploymentManager(DeploymentManager):
 
     def list_deployments(self, **kwargs) -> list[dict[str, t.Any]]:
         try:
-            _cloud_client = BentoMLContainer.bentocloud_client()
-            deployments = _cloud_client.deployment.list()
+            deployments = self._cloud_client.deployment.list()
             return [
                 d.to_dict() if hasattr(d, "to_dict") else vars(d) for d in deployments
             ]
@@ -127,8 +178,7 @@ class BentoCloudDeploymentManager(DeploymentManager):
 
     def delete_deployment(self, deployment_id: str, **kwargs) -> None:
         try:
-            _cloud_client = BentoMLContainer.bentocloud_client()
-            _cloud_client.deployment.delete(name=deployment_id)
+            self._cloud_client.deployment.delete(name=deployment_id)
         except BentoMLException as e:
             error_msg = str(e)
             raise RuntimeError((404, error_msg, None))
