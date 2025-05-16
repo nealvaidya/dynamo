@@ -51,7 +51,6 @@ pub enum MoveBlock {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum MoveBlockResponse {
     Success,
-    Partial(NumBlocks),
     Failure,
 }
 
