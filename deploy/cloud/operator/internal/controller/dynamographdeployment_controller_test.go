@@ -270,7 +270,7 @@ func Test_overrideWithDynDeploymentConfig(t *testing.T) {
 									Value: `{"Frontend":{"port":8080,"ServiceArgs":{"Workers":3, "Resources":{"CPU":"2", "Memory":"2Gi", "GPU":"2"}}},"Planner":{"environment":"kubernetes"}}`,
 								},
 							},
-							Replicas: &[]int32{1}[0],
+							Replicas: nil,
 							Resources: &common.Resources{
 								Requests: &common.ResourceItem{
 									CPU:    "1",
@@ -324,7 +324,7 @@ func Test_overrideWithDynDeploymentConfig(t *testing.T) {
 									Value: `{"Frontend":{"port":8080,"ServiceArgs":{"Workers":3, "Resources":{"CPU":"2", "Memory":"2Gi", "GPU":"8"}, "total_gpus":16}},"Planner":{"environment":"kubernetes"}}`,
 								},
 							},
-							Replicas: &[]int32{1}[0],
+							Replicas: nil,
 							Resources: &common.Resources{
 								Requests: &common.ResourceItem{
 									CPU:    "1",
@@ -382,7 +382,7 @@ func Test_overrideWithDynDeploymentConfig(t *testing.T) {
 									Value: `{"Frontend":{"port":8080,"ServiceArgs":{"Workers":3, "Resources":{"GPU":"2"}}},"Planner":{"environment":"kubernetes"}}`,
 								},
 							},
-							Replicas: &[]int32{1}[0],
+							Replicas: nil,
 							Resources: &common.Resources{
 								Requests: &common.ResourceItem{
 									CPU:    "1",
@@ -416,6 +416,55 @@ func Test_overrideWithDynDeploymentConfig(t *testing.T) {
 								CPU:    "",
 								Memory: "",
 								GPU:    "2",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "do not override replicas if explicitly set in the CRD !",
+			args: args{
+				ctx: context.Background(),
+				dynamoDeploymentComponent: &nvidiacomv1alpha1.DynamoComponentDeployment{
+					Spec: nvidiacomv1alpha1.DynamoComponentDeploymentSpec{
+						DynamoComponentDeploymentSharedSpec: nvidiacomv1alpha1.DynamoComponentDeploymentSharedSpec{
+							ServiceName: "Frontend",
+							Envs: []corev1.EnvVar{
+								{
+									Name:  "DYN_DEPLOYMENT_CONFIG",
+									Value: `{"Frontend":{"port":8080,"ServiceArgs":{"Workers":3}},"Planner":{"environment":"kubernetes"}}`,
+								},
+							},
+							Replicas: &[]int32{1}[0],
+							Resources: &common.Resources{
+								Requests: &common.ResourceItem{
+									CPU:    "1",
+									Memory: "1Gi",
+									GPU:    "1",
+								},
+							},
+						},
+					},
+				},
+			},
+			wantErr: false,
+			expected: &nvidiacomv1alpha1.DynamoComponentDeployment{
+				Spec: nvidiacomv1alpha1.DynamoComponentDeploymentSpec{
+					DynamoComponentDeploymentSharedSpec: nvidiacomv1alpha1.DynamoComponentDeploymentSharedSpec{
+						ServiceName: "Frontend",
+						Envs: []corev1.EnvVar{
+							{
+								Name:  "DYN_DEPLOYMENT_CONFIG",
+								Value: `{"Frontend":{"port":8080,"ServiceArgs":{"Workers":3}},"Planner":{"environment":"kubernetes"}}`,
+							},
+						},
+						Replicas: &[]int32{1}[0],
+						Resources: &common.Resources{
+							Requests: &common.ResourceItem{
+								CPU:    "1",
+								Memory: "1Gi",
+								GPU:    "1",
 							},
 						},
 					},
