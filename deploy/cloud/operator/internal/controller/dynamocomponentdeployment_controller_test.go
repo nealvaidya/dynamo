@@ -933,7 +933,7 @@ func TestDynamoComponentDeploymentReconciler_generateLeaderWorkerSet(t *testing.
 										Name:    "main",
 										Image:   "test-image:latest",
 										Command: []string{"sh", "-c"},
-										Args:    []string{"ray start --head --port=6379 --num-gpus=1 && cd src && uv run dynamo serve --service-name test-lws-deploy-service test-tag --test-lws-deploy-service.ServiceArgs.dynamo.namespace=default --test-lws-deploy-service.environment=kubernetes"},
+										Args:    []string{"ray start --head --port=6379 && cd src && uv run dynamo serve --service-name test-lws-deploy-service test-tag --test-lws-deploy-service.ServiceArgs.dynamo.namespace=default --test-lws-deploy-service.environment=kubernetes"},
 										Env:     []corev1.EnvVar{{Name: "DYNAMO_PORT", Value: "3000"}},
 										VolumeMounts: []corev1.VolumeMount{
 											{
@@ -984,7 +984,7 @@ func TestDynamoComponentDeploymentReconciler_generateLeaderWorkerSet(t *testing.
 										Name:         "main",
 										Image:        "test-image:latest",
 										Command:      []string{"sh", "-c"},
-										Args:         []string{"ray start --address=$(LWS_LEADER_ADDRESS):6379 --num-gpus=1"},
+										Args:         []string{"ray start --address=$(LWS_LEADER_ADDRESS):6379 --block"},
 										Env:          []corev1.EnvVar{{Name: "DYNAMO_PORT", Value: "3000"}},
 										VolumeMounts: []corev1.VolumeMount{{Name: "shared-memory", MountPath: "/dev/shm"}},
 										Ports:        []corev1.ContainerPort{{Protocol: corev1.ProtocolTCP, Name: "http", ContainerPort: 3000}},
