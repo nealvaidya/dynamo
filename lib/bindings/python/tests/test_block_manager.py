@@ -34,12 +34,10 @@ DEVICE_NUM_BLOCKS = 16
 DEVICE_ID = 0
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA unavailable")
 async def test_block_manager_initialization():
     BlockManager(WORKER_ID, NUM_LAYER, PAGE_SIZE, INNER_DIM)
     BlockManager(WORKER_ID, NUM_LAYER, PAGE_SIZE, INNER_DIM, DTYPE)
-    if not torch.cuda.is_available():
-        # Cannot test blocks if CUDA is not available
-        return
     BlockManager(WORKER_ID, NUM_LAYER, PAGE_SIZE, INNER_DIM, DTYPE, HOST_NUM_BLOCKS)
     BlockManager(
         WORKER_ID,
@@ -79,10 +77,8 @@ async def test_block_manager_initialization():
     )
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA unavailable")
 async def test_cpu_block_access():
-    if not torch.cuda.is_available():
-        # Cannot test blocks if CUDA is not available
-        return
     block_manager = BlockManager(
         WORKER_ID,
         NUM_LAYER,
@@ -118,10 +114,8 @@ async def test_cpu_block_access():
         assert torch.allclose(tensor, tensor_)
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA unavailable")
 async def test_gpu_block_access():
-    if not torch.cuda.is_available():
-        # Cannot test blocks if CUDA is not available
-        return
     block_manager = BlockManager(
         WORKER_ID,
         NUM_LAYER,
@@ -157,10 +151,8 @@ async def test_gpu_block_access():
         assert torch.allclose(tensor, tensor_)
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA unavailable")
 async def test_block_list_iteration():
-    if not torch.cuda.is_available():
-        # Cannot test blocks if CUDA is not available
-        return
     block_manager = BlockManager(
         WORKER_ID,
         NUM_LAYER,
