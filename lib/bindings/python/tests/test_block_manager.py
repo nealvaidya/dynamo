@@ -181,20 +181,20 @@ async def test_block_list_iteration():
         tensor = torch.from_dlpack(block)
         tensor[0][0][0][0] = 1.0 + i
     # Test __iter__() and __next__()
-    i = 1.0
+    idx = 1.0
     for block in block_list:
         tensor = torch.from_dlpack(block)
-        assert tensor[0][0][0][0] == i
+        assert tensor[0][0][0][0] == idx
         tensor[0][0][0][0] += 0.5
-        i += 1.0
-    assert i == 1.0 + block_count
+        idx += 1.0
+    assert idx == 1.0 + block_count
     # Test __iter__() should reset current index
-    i = 1.0
+    idx = 1.0
     for block in block_list:
         tensor = torch.from_dlpack(block)
-        assert tensor[0][0][0][0] == i + 0.5
-        i += 1.0
-    assert i == 1.0 + block_count
+        assert tensor[0][0][0][0] == idx + 0.5
+        idx += 1.0
+    assert idx == 1.0 + block_count
 
 
 async def main():
