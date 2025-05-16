@@ -17,7 +17,7 @@ use super::*;
 
 use super::offload::OffloadManager;
 use super::{
-    block::{Block, ImmutableBlock, GlobalRegistry},
+    block::{Block, GlobalRegistry, ImmutableBlock},
     config::NixlOptions,
     pool::BlockPoolError,
 };

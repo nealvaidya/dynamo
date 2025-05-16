@@ -69,7 +69,8 @@ use priority_key::PriorityKey;
 pub use super::block::{ImmutableBlock, MutableBlock};
 
 use super::block::{
-    nixl::short_type_name, registry::BlockRegistry, Block, BlockError, BlockMetadata, GlobalRegistry
+    nixl::short_type_name, registry::BlockRegistry, Block, BlockError, BlockMetadata,
+    GlobalRegistry,
 };
 use super::events::{EventManager, NullEventManager};
 use super::storage::Storage;
