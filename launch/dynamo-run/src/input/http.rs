@@ -29,7 +29,7 @@ use dynamo_llm::{
         openai::completions::{CompletionRequest, CompletionResponse},
     },
 };
-use dynamo_runtime::component::Component;
+use dynamo_runtime::component::{self, Component};
 use dynamo_runtime::pipeline::RouterMode;
 use dynamo_runtime::transports::etcd;
 use dynamo_runtime::{DistributedRuntime, Runtime};
@@ -52,19 +52,16 @@ pub async fn run(
             let distributed_runtime = DistributedRuntime::from_settings(runtime.clone()).await?;
             match distributed_runtime.etcd_client() {
                 Some(etcd_client) => {
-                    // This will attempt to connect to NATS and etcd
-
                     let component = distributed_runtime
                         .namespace(endpoint.namespace)?
                         .component(endpoint.component)?;
-                    let network_prefix = component.service_name();
 
                     // Listen for models registering themselves in etcd, add them to HTTP service
                     run_watcher(
                         component.clone(),
                         http_service.model_manager().clone(),
                         etcd_client.clone(),
-                        &network_prefix,
+                        component::MODEL_ROOT_PATH,
                         flags.router_mode.into(),
                     )
                     .await?;
@@ -123,9 +120,8 @@ async fn run_watcher(
     network_prefix: &str,
     router_mode: RouterMode,
 ) -> anyhow::Result<()> {
-    let watch_obj = Arc::new(
-        discovery::ModelWatcher::new(component, model_manager, network_prefix, router_mode).await?,
-    );
+    let watch_obj =
+        Arc::new(discovery::ModelWatcher::new(component, model_manager, router_mode).await?);
     tracing::info!("Watching for remote model at {network_prefix}");
     let models_watcher = etcd_client.kv_get_and_watch_prefix(network_prefix).await?;
     let (_prefix, _watcher, receiver) = models_watcher.dissolve();

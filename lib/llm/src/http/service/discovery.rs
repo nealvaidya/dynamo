@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::Receiver;
 
 use dynamo_runtime::{
-    component::{self, Component, ComponentEndpointInfo},
+    component::{self, Component, Instance},
     pipeline::{
         network::egress::push_router::PushRouter, ManyOut, Operator, RouterMode, SegmentSource,
         ServiceBackend, SingleIn, Source,
@@ -65,15 +65,13 @@ impl ModelEntry {
     /// This does not touch it's fields so you may need to call move_from_nats on it.
     pub async fn load_mdc(
         &self,
-        endpoint_id: protocols::Endpoint,
         etcd_client: &etcd::Client,
     ) -> anyhow::Result<ModelDeploymentCard> {
-        let kvstore: Box<dyn KeyValueStore> =
-            Box::new(EtcdStorage::new(etcd_client.clone(), endpoint_id));
+        let kvstore: Box<dyn KeyValueStore> = Box::new(EtcdStorage::new(etcd_client.clone()));
         let card_store = Arc::new(KeyValueStoreManager::new(kvstore));
         let card_key = ModelDeploymentCard::service_name_slug(&self.name);
         match card_store
-            .load::<ModelDeploymentCard>(model_card::BUCKET_NAME, &card_key)
+            .load::<ModelDeploymentCard>(model_card::ROOT_PATH, &card_key)
             .await
         {
             Ok(Some(mdc)) => Ok(mdc),
@@ -98,9 +96,9 @@ impl ModelNetworkName {
     /// It looks like this:
     /// ns.cp.ep-694d967ca5efd804
     fn from_parts(namespace: &str, component: &str, endpoint: &str, lease_id: i64) -> Self {
-        ModelNetworkName(
-            Slug::slugify(&format!("{namespace}.{component}.{endpoint}-{lease_id:x}")).to_string(),
-        )
+        let model_root = component::MODEL_ROOT_PATH;
+        let slug = Slug::slugify(&format!("{namespace}.{component}.{endpoint}-{lease_id:x}"));
+        ModelNetworkName(format!("{model_root}/{slug}"))
     }
 
     // We can't do From<&component::Endpoint> here because we also need the lease_id
@@ -133,17 +131,21 @@ impl ModelNetworkName {
     /// TODO We have potentially two for each endpoint, one Chat and one Completion.
     pub async fn load_mdc(
         &self,
-        endpoint_id: protocols::Endpoint,
         etcd_client: &etcd::Client,
     ) -> anyhow::Result<ModelDeploymentCard> {
         let entry = self.load_entry(etcd_client).await?;
-        entry.load_mdc(endpoint_id, etcd_client).await
+        entry.load_mdc(etcd_client).await
     }
 }
 
-impl From<&ComponentEndpointInfo> for ModelNetworkName {
-    fn from(cei: &ComponentEndpointInfo) -> Self {
-        Self::from_parts(&cei.namespace, &cei.component, &cei.endpoint, cei.lease_id)
+impl From<&Instance> for ModelNetworkName {
+    fn from(cei: &Instance) -> Self {
+        Self::from_parts(
+            &cei.namespace,
+            &cei.component,
+            &cei.endpoint,
+            cei.instance_id,
+        )
     }
 }
 
@@ -154,7 +156,6 @@ impl std::fmt::Display for ModelNetworkName {
 }
 
 pub struct ModelWatcher {
-    prefix: String,
     manager: ModelManager,
     drt: DistributedRuntime,
     router_mode: RouterMode,
@@ -165,7 +166,6 @@ impl ModelWatcher {
     pub async fn new(
         component: Component,
         model_manager: ModelManager,
-        network_prefix: &str,
         router_mode: RouterMode,
     ) -> anyhow::Result<ModelWatcher> {
         let kv_chooser = if router_mode.is_kv_routing() {
@@ -181,7 +181,6 @@ impl ModelWatcher {
             None
         };
         Ok(Self {
-            prefix: network_prefix.to_string(),
             manager: model_manager,
             drt: component.drt().clone(),
             router_mode,
@@ -198,7 +197,14 @@ impl ModelWatcher {
                     let model_entry = match serde_json::from_slice::<ModelEntry>(kv.value()) {
                         Ok(model_entry) => model_entry,
                         Err(err) => {
-                            tracing::error!(%err, ?kv, "Invalid JSON in model entry");
+                            match kv.value_str() {
+                                Ok(value) => {
+                                    tracing::error!(%err, value, "Invalid JSON in model entry")
+                                }
+                                Err(value_str_err) => {
+                                    tracing::error!(original_error = %err, %value_str_err, "Invalid UTF-8 string in model entry, expected JSON")
+                                }
+                            }
                             continue;
                         }
                     };
@@ -210,7 +216,7 @@ impl ModelWatcher {
                         continue;
                     }
 
-                    match self.clone().handle_put(&model_entry).await {
+                    match self.clone().handle_put(&kv, &model_entry).await {
                         Ok(()) => {
                             tracing::info!(model_name = model_entry.name, "added model");
                         }
@@ -231,24 +237,36 @@ impl ModelWatcher {
         }
     }
 
-    async fn handle_delete(self: Arc<Self>, kv: &KeyValue) -> anyhow::Result<&str> {
+    /// Returns the name of the model we just deleted
+    async fn handle_delete(self: Arc<Self>, kv: &KeyValue) -> anyhow::Result<String> {
         let key = kv.key_str()?;
-        tracing::debug!(key, "removing model");
-
-        let model_name = key.trim_start_matches(&self.prefix);
+        let model_entry = match self.manager.state.entries.lock().unwrap().remove(key) {
+            Some(entry) => entry,
+            None => {
+                anyhow::bail!("Missing ModelEntry for {key}");
+            }
+        };
+        let model_name = &model_entry.name;
+        tracing::debug!(model_name, "removing model");
 
         // Ignore the errors because model could be either type
         let _ = self.manager.remove_chat_completions_model(model_name);
         let _ = self.manager.remove_completions_model(model_name);
 
-        Ok(model_name)
+        // We own model_entry now so take ownership of the name
+        Ok(model_entry.name)
     }
 
     // Handles a PUT event from etcd, this usually means adding a new model to the list of served
     // models.
     //
     // If this method errors, for the near term, we will delete the offending key.
-    async fn handle_put(self: Arc<ModelWatcher>, model_entry: &ModelEntry) -> anyhow::Result<()> {
+    async fn handle_put(
+        self: Arc<ModelWatcher>,
+        kv: &KeyValue,
+        model_entry: &ModelEntry,
+    ) -> anyhow::Result<()> {
+        let key = kv.key_str()?;
         let endpoint_id = model_entry.endpoint.clone();
         let client = self
             .drt
@@ -262,7 +280,7 @@ impl ModelWatcher {
             // Should be impossible because we only get here on an etcd event
             anyhow::bail!("Missing etcd_client");
         };
-        let card = match model_entry.load_mdc(endpoint_id, &etcd_client).await {
+        let card = match model_entry.load_mdc(&etcd_client).await {
             Ok(card) => {
                 tracing::debug!(card.display_name, "adding model");
                 Some(card)
@@ -273,6 +291,14 @@ impl ModelWatcher {
                 None
             }
         };
+        // We need to save the entry to know what the model is called when we delete it
+        self.manager
+            .state
+            .entries
+            .lock()
+            .unwrap()
+            .insert(key.to_string(), model_entry.clone());
+
         match model_entry.model_type {
             ModelType::Backend => {
                 // A Backend model expects pre-processed requests meaning it's up to us whether we

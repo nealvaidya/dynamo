@@ -71,16 +71,16 @@ pub async fn prepare_engine(
 
             tracing::info!("Waiting for remote model..");
 
-            let remote_endpoints = client.wait_for_endpoints().await?;
-            debug_assert!(!remote_endpoints.is_empty());
-            tracing::info!(count = remote_endpoints.len(), "Model(s) discovered");
+            let instances = client.wait_for_instances().await?;
+            debug_assert!(!instances.is_empty());
+            tracing::info!(count = instances.len(), "Model(s) discovered");
 
-            let network_name: ModelNetworkName = (&remote_endpoints[0]).into();
+            let network_name: ModelNetworkName = (&instances[0]).into();
             let Some(etcd_client) = distributed_runtime.etcd_client() else {
                 anyhow::bail!("Cannot run distributed components without etcd");
             };
             let network_entry = network_name.load_entry(&etcd_client).await?;
-            let mut card = network_entry.load_mdc(endpoint_id, &etcd_client).await?;
+            let mut card = network_entry.load_mdc(&etcd_client).await?;
 
             let engine: OpenAIChatCompletionsStreamingEngine = match network_entry.model_type {
                 ModelType::Backend => {

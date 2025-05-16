@@ -42,6 +42,7 @@ pub mod service_v2;
 
 pub use async_trait::async_trait;
 pub use axum;
+use discovery::ModelEntry;
 pub use error::ServiceHttpError;
 pub use metrics::Metrics;
 
@@ -193,6 +194,7 @@ pub struct DeploymentState {
     chat_completion_engines: Arc<Mutex<ModelEngines<OpenAIChatCompletionsStreamingEngine>>>,
     metrics: Arc<Metrics>,
     sse_keep_alive: Option<Duration>,
+    entries: Arc<Mutex<HashMap<String, ModelEntry>>>,
 }
 
 impl DeploymentState {
@@ -202,6 +204,7 @@ impl DeploymentState {
             chat_completion_engines: Arc::new(Mutex::new(ModelEngines::default())),
             metrics: Arc::new(Metrics::default()),
             sse_keep_alive: None,
+            entries: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 

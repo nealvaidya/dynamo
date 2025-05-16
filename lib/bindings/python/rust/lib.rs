@@ -1,17 +1,5 @@
 // SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 use futures::StreamExt;
 use once_cell::sync::OnceCell;
@@ -584,16 +572,27 @@ impl EtcdClient {
 
 #[pymethods]
 impl Client {
-    /// Get list of current endpoints
+
+    #[deprecated(since = "0.3.0", note = "Use `instance_ids` instead")]
     fn endpoint_ids(&self) -> Vec<i64> {
-        self.router.client.endpoint_ids()
+        self.instance_ids()
     }
 
+    /// Get list of current instances
+    fn instance_ids(&self) -> Vec<i64> {
+        self.router.client.instance_ids()
+    }
+
+    #[deprecated(since = "0.3.0", note = "Use `wait_for_instances` instead")]
     fn wait_for_endpoints<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
+        self.wait_for_instances(py)
+    }
+
+    fn wait_for_instances<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyAny>> {
         let inner = self.router.client.clone();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             inner
-                .wait_for_endpoints()
+                .wait_for_instances()
                 .await
                 .map(|v| v.into_iter().map(|cei| cei.id()).collect::<Vec<i64>>())
                 .map_err(to_pyerr)
@@ -664,12 +663,12 @@ impl Client {
     }
 
     /// Directly send a request to a specific endpoint.
-    #[pyo3(signature = (request, endpoint_id, annotated=DEFAULT_ANNOTATED_SETTING))]
+    #[pyo3(signature = (request, instance_id, annotated=DEFAULT_ANNOTATED_SETTING))]
     fn direct<'p>(
         &self,
         py: Python<'p>,
         request: PyObject,
-        endpoint_id: i64,
+        instance_id: i64,
         annotated: Option<bool>,
     ) -> PyResult<Bound<'p, PyAny>> {
         let request: serde_json::Value = pythonize::depythonize(&request.into_bound(py))?;
@@ -680,7 +679,7 @@ impl Client {
 
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let stream = client
-                .direct(request.into(), endpoint_id)
+                .direct(request.into(), instance_id)
                 .await
                 .map_err(to_pyerr)?;
 
