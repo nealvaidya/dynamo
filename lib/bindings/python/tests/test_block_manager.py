@@ -36,6 +36,8 @@ DEVICE_ID = 0
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA unavailable")
 async def test_block_manager_initialization():
+    # Python should drop the BlockManager instance as soon as it goes out of scope, but
+    # it may not be garbage collected immediately, depending on the garbage collector.
     BlockManager(WORKER_ID, NUM_LAYER, PAGE_SIZE, INNER_DIM)
     BlockManager(WORKER_ID, NUM_LAYER, PAGE_SIZE, INNER_DIM, DTYPE)
     BlockManager(WORKER_ID, NUM_LAYER, PAGE_SIZE, INNER_DIM, DTYPE, HOST_NUM_BLOCKS)
