@@ -91,16 +91,21 @@ class ScalingPolicy:
 
 
 @dataclass
+class Env:
+    name: str
+    value: str = ""
+
+
+@dataclass
 class Service:
     """A single component."""
 
     name: str
     namespace: str
-    class_name: str
     id: str | None = None
     cmd: list[str] = field(default_factory=list)
     resources: Resources | None = None
-    environment: dict[str, str] = field(default_factory=dict)
+    envs: list[Env] = field(default_factory=list)
     secrets: list[str] = field(default_factory=list)
     scaling: ScalingPolicy = field(default_factory=lambda: ScalingPolicy(policy="none"))
 

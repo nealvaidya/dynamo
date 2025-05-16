@@ -15,6 +15,7 @@
 
 import time
 import typing as t
+from datetime import datetime
 
 import requests
 
@@ -22,6 +23,7 @@ from dynamo.sdk.core.protocol.deployment import (
     Deployment,
     DeploymentManager,
     DeploymentStatus,
+    Service,
 )
 
 
@@ -38,48 +40,66 @@ class KubernetesDeploymentManager(DeploymentManager):
         self.session = requests.Session()
         self.namespace = "default"
 
-    def create_deployment(self, deployment: Deployment, **kwargs) -> str:
-        """Create a new deployment. Ensures all components and versions are registered/uploaded before creating the deployment."""
+    def _upload_service(self, service: Service, **kwargs) -> None:
+        """Upload a service to the API store."""
         session = self.session
         endpoint = self.endpoint
 
+        if ":" not in service.name or len((parts := service.name.split(":"))) != 2:
+            raise ValueError("Invalid service name format, expected 'name:version'")
+        name, version = parts
+        description = f"Auto-registered by Dynamo's KubernetesDeploymentManager for {name}:{version}"
+
+        # --- Component creation ---
+        comp_url = f"{endpoint}/api/v1/dynamo_components"
+        comp_payload = {
+            "name": name,
+            "description": description,
+        }
+        labels = getattr(service, "environment", None)
+        if labels and isinstance(labels, dict):
+            comp_payload["labels"] = labels
+        resp = session.post(comp_url, json=comp_payload)
+        if resp.status_code not in (200, 201, 409):
+            raise RuntimeError(f"Failed to create component: {resp.text}")
+
+        # --- Manifest construction ---
+        # Try to extract manifest info from service if available, else use defaults
+        manifest = {
+            "service": name,
+            "bentoml_version": getattr(service, "bentoml_version", "0.0.0"),
+            "apis": getattr(service, "apis", {}),
+            "size_bytes": getattr(service, "size_bytes", 0),
+        }
+
+        # --- Component version creation ---
+        ver_url = f"{endpoint}/api/v1/dynamo_components/{name}/versions"
+        build_at = kwargs.get("build_at")
+        if not build_at:
+            build_at = datetime.utcnow()
+        if isinstance(build_at, str):
+            # Try to parse string to datetime if user passed as string
+            try:
+                build_at = datetime.fromisoformat(build_at)
+            except Exception:
+                build_at = datetime.utcnow()
+        ver_payload = {
+            "description": description,
+            "version": version,
+            "manifest": manifest,
+            "build_at": build_at.isoformat(),
+        }
+        if labels and isinstance(labels, dict):
+            ver_payload["labels"] = [{"key": k, "value": v} for k, v in labels.items()]
+        resp = session.post(ver_url, json=ver_payload)
+        if resp.status_code not in (200, 201, 409):
+            raise RuntimeError(f"Failed to create component version: {resp.text}")
+
+    def create_deployment(self, deployment: Deployment, **kwargs) -> str:
+        """Create a new deployment. Ensures all components and versions are registered/uploaded before creating the deployment."""
         # For each service/component in the deployment, upload it to the API store
         for service in deployment.services:
-            if ":" not in service.name or len(parts := service.name.split(":")) != 2:
-                raise ValueError("Invalid service name format, expected 'name:version'")
-            name, version = parts
-            description = f"Auto-registered by Dynamo's KubernetesDeploymentManager for {name}:{version}"
-            manifest = {
-                "service": name,
-            }
-            build_at = kwargs.get("build_at")
-            labels = service.environment if hasattr(service, "environment") else None
-
-            comp_url = f"{endpoint}/api/v1/dynamo_components"
-            comp_payload = {
-                "name": name,
-                "description": description,
-            }
-            if labels:
-                comp_payload["labels"] = labels
-            resp = session.post(comp_url, json=comp_payload)
-            if resp.status_code not in (200, 201, 409):
-                raise RuntimeError(f"Failed to create component: {resp.text}")
-
-            ver_url = f"{endpoint}/api/v1/dynamo_components/{name}/versions"
-            ver_payload = {
-                "description": description,
-                "version": version,
-                "manifest": manifest,
-                "build_at": build_at or "2024-01-01T00:00:00Z",
-            }
-            if labels:
-                ver_payload["labels"] = [
-                    {"key": k, "value": v} for k, v in labels.items()
-                ]
-            resp = session.post(ver_url, json=ver_payload)
-            if resp.status_code not in (200, 201, 409):
-                raise RuntimeError(f"Failed to create component version: {resp.text}")
+            self._upload_service(service)
 
         # Now create the deployment
         component = kwargs.get("pipeline") or deployment.namespace
