@@ -629,13 +629,12 @@ func (r *DynamoComponentDeploymentReconciler) generateWorkerPodTemplateSpec(ctx 
 		return nil, errors.New("generateWorkerPodTemplateSpec: container Args cannot be empty for Ray worker pod")
 	}
 
-	currentArgs := workerPodTemplateSpec.Spec.Containers[0].Args[0]
 	if opt.dynamoComponentDeployment.Spec.Resources == nil || opt.dynamoComponentDeployment.Spec.Resources.Limits == nil || opt.dynamoComponentDeployment.Spec.Resources.Limits.GPU == "" {
 		return nil, fmt.Errorf("generateWorkerPodTemplateSpec: GPU limit is not set for Ray worker pod")
 	}
 
 	numGpus := opt.dynamoComponentDeployment.Spec.Resources.Limits.GPU
-	workerPodTemplateSpec.Spec.Containers[0].Args[0] = fmt.Sprintf("ray start --address=$(LWS_LEADER_ADDRESS):6379 --num-gpus=%s && %s", numGpus, currentArgs)
+	workerPodTemplateSpec.Spec.Containers[0].Args[0] = fmt.Sprintf("ray start --address=$(LWS_LEADER_ADDRESS):6379 --num-gpus=%s", numGpus)
 
 	return workerPodTemplateSpec, nil
 }
