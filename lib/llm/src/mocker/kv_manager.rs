@@ -15,7 +15,7 @@
 
 use crate::mocker::evictor::LRUEvictor;
 use crate::mocker::protocols::{MoveBlock, UniqueBlock};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::panic;
 use std::time::Instant;
 
@@ -26,6 +26,7 @@ pub struct KvManager {
     pub active_blocks: HashMap<UniqueBlock, usize>,
     pub inactive_blocks: LRUEvictor<UniqueBlock>,
     pub start_time: Instant,
+    pub all_blocks: HashSet<UniqueBlock>,
 }
 
 impl KvManager {
@@ -33,6 +34,7 @@ impl KvManager {
         let active_blocks = HashMap::new();
         let inactive_blocks = LRUEvictor::new();
         let start_time = Instant::now();
+        let all_blocks = HashSet::new();
 
         KvManager {
             max_capacity,
@@ -40,6 +42,7 @@ impl KvManager {
             active_blocks,
             inactive_blocks,
             start_time,
+            all_blocks,
         }
     }
 
@@ -58,7 +61,7 @@ impl KvManager {
                     // Then check if it exists in inactive and move it to active if found
                     if self.inactive_blocks.remove(&hash) {
                         // Insert into active with reference count 1
-                        self.active_blocks.insert(hash, 1);
+                        self.active_blocks.insert(hash.clone(), 1);
                         continue;
                     }
 
@@ -67,20 +70,27 @@ impl KvManager {
                     let inactive_count = self.inactive_blocks.num_objects();
 
                     // If at max capacity, evict the oldest entry from inactive blocks
-                    if active_count + inactive_count >= self.max_capacity
-                        && self.inactive_blocks.evict().is_none()
-                    {
-                        panic!("max capacity reached and no free blocks left");
+                    if active_count + inactive_count >= self.max_capacity {
+                        if let Some(evicted) = self.inactive_blocks.evict() {
+                            // Remove evicted block from all_blocks
+                            self.all_blocks.remove(&evicted);
+                        } else {
+                            panic!("max capacity reached and no free blocks left");
+                        }
                     }
 
                     // Now insert the new block in active blocks with reference count 1
-                    self.active_blocks.insert(hash, 1);
+                    self.active_blocks.insert(hash.clone(), 1);
+                    // Add to all_blocks as it's a new block
+                    self.all_blocks.insert(hash);
                 }
             }
             MoveBlock::Destroy(hashes) => {
                 // Loop in inverse direction
                 for hash in hashes.into_iter().rev() {
                     self.active_blocks.remove(&hash);
+                    // Remove from all_blocks when destroyed
+                    self.all_blocks.remove(&hash);
                 }
             }
             MoveBlock::Deref(hashes) => {
@@ -106,10 +116,19 @@ impl KvManager {
                 // Check if the UUID block exists in active blocks
                 if let Some(ref_count) = self.active_blocks.remove(&uuid_block) {
                     // Replace with hash block, keeping the same reference count
-                    self.active_blocks.insert(hash_block, ref_count);
+                    self.active_blocks.insert(hash_block.clone(), ref_count);
+
+                    // Update all_blocks
+                    self.all_blocks.remove(&uuid_block);
+                    self.all_blocks.insert(hash_block);
                 }
             }
         }
+    }
+
+    /// Get the count of blocks in the input list that aren't in all_blocks
+    pub fn probe_new_blocks(&self, blocks: Vec<UniqueBlock>) -> usize {
+        blocks.into_iter().filter(|block| !self.all_blocks.contains(block)).count()
     }
 
     /// Get the current capacity (active blocks + inactive blocks)
@@ -272,6 +291,10 @@ mod tests {
         // Check that the inactive_blocks is size 2, and contains 3 and 5
         assert_inactive_blocks(&manager, 2, &[3, 5]);
         assert_active_blocks(&manager, &[(0, 1), (1, 1), (2, 1), (7, 1), (8, 1), (9, 1)]);
+
+        // Test the new_blocks method - only block 4 should be new out of [0,1,2,3,4]
+        let blocks_to_check: Vec<UniqueBlock> = vec![0, 1, 2, 3, 4].into_iter().map(UniqueBlock::FullBlock).collect();
+        assert_eq!(manager.probe_new_blocks(blocks_to_check), 1);
 
         // Now use blocks 10, 11, 12 as a batch
         use_blocks(&mut manager, vec![10, 11, 12]);
