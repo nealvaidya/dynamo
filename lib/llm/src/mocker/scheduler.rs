@@ -33,7 +33,7 @@ struct SchedulerState {
 /// Manages scheduling of requests using KvManager resources
 pub struct Scheduler {
     state: Arc<Mutex<SchedulerState>>,
-    kv_manager: Arc<KvManager>, // Store KvManager directly in Scheduler
+    kv_manager: Arc<Mutex<KvManager>>, // Now need to protect KvManager with Mutex for thread safety
     active_tokens: Arc<Mutex<HashMap<Uuid, usize>>>,
     token_capacity: usize,
     watermark: f64,
@@ -62,7 +62,7 @@ impl Scheduler {
             running_requests: HashMap::new(),
         }));
 
-        let kv_manager = Arc::new(kv_manager);
+        let kv_manager = Arc::new(Mutex::new(kv_manager));
         let chunk_size = chunk_size.unwrap_or(256);
 
         let active_tokens = Arc::new(Mutex::new(HashMap::new()));
@@ -97,15 +97,21 @@ impl Scheduler {
                     }
 
                     _ = process_interval.tick() => {
-                        // Acquire locks in order (state first, then active_tokens) to prevent deadlocks
+                        // Acquire locks in order to prevent deadlocks
                         let mut state_guard = state_clone.lock().await;
+                        let mut kv_manager_guard = kv_manager_clone.lock().await;
                         let mut active_tokens_guard = active_tokens_clone.lock().await;
 
                         // Process each running request
                         let mut uuids_to_remove = Vec::new();
                         for (uuid, sequence) in state_guard.running_requests.iter_mut() {
-                            // Generate token
-                            sequence.generate();
+                            // Generate token and get signals
+                            let signals = sequence.generate();
+
+                            // Process all signals with the KvManager
+                            for signal in signals {
+                                kv_manager_guard.process(signal);
+                            }
 
                             // Send UUID notification for each generated token
                             if let Some(tx) = &output_tx_clone {
@@ -142,9 +148,12 @@ impl Scheduler {
                         let mut active_tokens_guard = active_tokens_clone.lock().await;
                         let current_token_usage: usize = active_tokens_guard.values().sum();
 
+                        // Lock KvManager for capacity check
+                        let mut kv_manager_guard = kv_manager_clone.lock().await;
+
                         // Check scheduling conditions
-                        let current_capacity = kv_manager_clone.current_capacity().await;
-                        let max_capacity = kv_manager_clone.max_capacity;
+                        let current_capacity = kv_manager_guard.current_capacity();
+                        let max_capacity = kv_manager_guard.max_capacity;
                         let input_len = request.tokens.len();
 
                         let can_schedule =
@@ -157,15 +166,19 @@ impl Scheduler {
 
                         // Process the request
                         let (uuid, request) = state_guard.waiting_requests.pop_front().unwrap();
-                        let event_tx = kv_manager_clone.get_event_sender();
 
-                        let sequence = ActiveSequence::new(
+                        // Create sequence and get initial signal
+                        let (sequence, initial_signal) = ActiveSequence::new(
                             request.tokens,
                             Some(block_size_clone),
                             Some(chunk_size_clone),
                             request.max_output_tokens,
-                            Some(event_tx),
                         );
+
+                        // Process initial signal if there is one
+                        if let Some(signal) = initial_signal {
+                            kv_manager_guard.process(signal);
+                        }
 
                         active_tokens_guard.insert(uuid, input_len);
                         state_guard.running_requests.insert(uuid, sequence);
@@ -208,6 +221,12 @@ impl Scheduler {
     pub async fn running_count(&self) -> usize {
         let state = self.state.lock().await;
         state.running_requests.len()
+    }
+
+    /// Get the current capacity of the KvManager
+    pub async fn current_capacity(&self) -> usize {
+        let kv_manager = self.kv_manager.lock().await;
+        kv_manager.current_capacity()
     }
 }
 
