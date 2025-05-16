@@ -322,6 +322,13 @@ def update_deployment(name: str, deployment: UpdateDeploymentSchema):
     try:
         ownership = {"organization_id": "default-org", "user_id": "default-user"}
         kube_namespace = get_namespace()
+        existing_deployment = get_deployment(name)
+        if existing_deployment.bento != deployment.bento:
+            raise HTTPException(
+                status_code=422,
+                detail="Cannot update the Dynamo components of a deployment.",
+            )
+
         deployment_name = sanitize_deployment_name(name, deployment.bento)
         updated_crd = update_dynamo_deployment(
             name=deployment_name,
