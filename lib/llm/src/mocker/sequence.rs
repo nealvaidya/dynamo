@@ -208,32 +208,34 @@ impl ActiveSequence {
         self.generated_tokens += 1;
 
         // Check if we've reached the limit after pushing
-        if self.generated_tokens == self.max_output_tokens {
-            // Collect blocks to deref based on type
-            match self.unique_blocks.last() {
-                Some(UniqueBlock::PartialBlock(uuid)) => {
-                    // All blocks except the last are full blocks, last is partial
-                    let full = self.unique_blocks[..self.unique_blocks.len() - 1].to_vec();
-                    let partial = vec![UniqueBlock::PartialBlock(*uuid)];
-
-                    // Add Destroy event for partial block first if it exists
-                    if !partial.is_empty() {
-                        signals.push(MoveBlock::Destroy(partial));
-                    }
-
-                    // Then add Deref event for full blocks
-                    if !full.is_empty() {
-                        signals.push(MoveBlock::Deref(full));
-                    }
-                }
-                _ => {
-                    // All blocks are full blocks
-                    if !self.unique_blocks.is_empty() {
-                        signals.push(MoveBlock::Deref(self.unique_blocks.clone()));
-                    }
-                }
-            };
+        if self.generated_tokens != self.max_output_tokens {
+            return signals;
         }
+
+        // Collect blocks to deref based on type
+        match self.unique_blocks.last() {
+            Some(UniqueBlock::PartialBlock(uuid)) => {
+                // All blocks except the last are full blocks, last is partial
+                let full = self.unique_blocks[..self.unique_blocks.len() - 1].to_vec();
+                let partial = vec![UniqueBlock::PartialBlock(*uuid)];
+
+                // Add Destroy event for partial block first if it exists
+                if !partial.is_empty() {
+                    signals.push(MoveBlock::Destroy(partial));
+                }
+
+                // Then add Deref event for full blocks
+                if !full.is_empty() {
+                    signals.push(MoveBlock::Deref(full));
+                }
+            }
+            _ => {
+                // All blocks are full blocks
+                if !self.unique_blocks.is_empty() {
+                    signals.push(MoveBlock::Deref(self.unique_blocks.clone()));
+                }
+            }
+        };
 
         signals
     }
