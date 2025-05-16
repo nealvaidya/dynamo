@@ -1,3 +1,21 @@
+<!--
+SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. 
+All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
 # Dynamo Support Matrix
 
 This document provides the support matrix for Dynamo, including hardware, software and build instructions.
@@ -59,7 +77,7 @@ For **Linux**, the **ARM64** support is experimental and may have limitations. W
 
 > **Note**:
 > - *ai-dynamo-vllm v0.8.4.post1 is a customized patch of v0.8.4 from vLLM.
-> - **The specific version of TensorRT-LLM (planned v0.19.0) that will be supported by Dynamo is subject to change.
+> - **Specific versions of TensorRT-LLM supported by Dynamo are subject to change.
 
 
 ## Build Support

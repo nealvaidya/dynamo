@@ -40,12 +40,12 @@ To adjust the number of prefill/decode workers, planner monitors the following m
 * Prefill worker: planner monitors the number of requests pending in the prefill queue to estimate the prefill workload.
 * Decode/aggregated worker: planner monitors the average KV cache utilization rate to estimate the decode/aggregated workload.
 
-Every `metric-pulling-interval`, planner will gather the aforementioned metrics. Every `adjustment-interval`, planner compares the aggregated metrics in this interval with pre-set thresholds and decide to scale up/down prefill/decode workers. To avoid over-compensation, planner only changes the number of workers by 1 in one adjustment interval. In addition, when the number of workers is being adjusted, the planner will block the metric pulling and adjustment.
+Every `metric-pulling-interval`, planner gathers the aforementioned metrics. Every `adjustment-interval`, planner compares the aggregated metrics in this interval with pre-set thresholds and decide to scale up/down prefill/decode workers. To avoid over-compensation, planner only changes the number of workers by 1 in one adjustment interval. In addition, when the number of workers is being adjusted, the planner blocks the metric pulling and adjustment.
 
-To scale up a prefill/decode worker, planner just need to launch the worker in the correct namespace. The auto-discovery mechanism will pick up the workers and add them to the routers. To scale down a prefill worker, planner send a SIGTERM signal to the prefill worker. The prefill worker store the signal and exit when it finishes the current request pulled from the prefill queue. This ensures that no remote prefill request is dropped. To scale down a decode worker, currently, planner revoke the etcd lease of the decode worker. When the etcd lease is revoked, the corresponding decode worker will be immediately removed from the router and will not get any new requests. The decode worker will then finish all the current requests in their original stream and exit gracefully.
+To scale up a prefill/decode worker, planner just need to launch the worker in the correct namespace. The auto-discovery mechanism picks up the workers and add them to the routers. To scale down a prefill worker, planner send a SIGTERM signal to the prefill worker. The prefill worker store the signal and exit when it finishes the current request pulled from the prefill queue. This ensures that no remote prefill request is dropped. To scale down a decode worker, planner revokes the etcd lease of the decode worker. When the etcd lease is revoked, the corresponding decode worker is immediately removed from the router and won't get any new requests. The decode worker then finishes all the current requests in their original stream and exits gracefully.
 
 There are two additional rules set by planner to prevent over-compensation:
-1. After a new decode worker is added, since it needs time to populate the kv cache, planner will not scale down the number of decode workers in the next `NEW_DECODE_WORKER_GRACE_PERIOD=3` adjustment intervals.
+1. After a new decode worker is added, since it needs time to populate the kv cache, planner doesn't scale down the number of decode workers in the next `NEW_DECODE_WORKER_GRACE_PERIOD=3` adjustment intervals.
 1. We do not scale up prefill worker if the prefill queue size is estimated to reduce below the `--prefill-queue-scale-up-threshold` within the next `NEW_PREFILL_WORKER_QUEUE_BUFFER_PERIOD=3` adjustment intervals following the trend observed in the current adjustment interval.
 
 ## Usage
@@ -55,14 +55,14 @@ PYTHONPATH=/workspace/examples/llm python components/planner.py <arguments>
 ```
 
 Planner takes the following arguments:
-* `--namespace` (str, default: "dynamo"): Namespace planner will look at
+* `--namespace` (str, default: "dynamo"): The namespace planner looks at
 * `--served-model-name` (str, default: "vllm"): Model name that is being served`
 * `--no-operation` (flag): Do not make any adjustments, just observe the metrics and log to tensorboard
 * `--log-dir` (str, default: None): Tensorboard logging directory
 * `--adjustment-interval` (int, default: 30): Interval in seconds between scaling adjustments
 * `--metric-pulling-interval` (int, default: 1): Interval in seconds between metric pulls
-* `--max-gpu-budget` (int, default: 8): Maximum number of GPUs to use, planner will not scale up more than this number of GPUs for prefill plus decode workers
-* `--min-gpu-budget` (int, default: 1): Minimum number of GPUs to use, planner will not scale down below this number of GPUs for prefill or decode workers
+* `--max-gpu-budget` (int, default: 8): Maximum number of GPUs to use, planner won't scale up more than this number of GPUs for prefill plus decode workers
+* `--min-gpu-budget` (int, default: 1): Minimum number of GPUs to use, planner won't scale down below this number of GPUs for prefill or decode workers
 * `--decode-kv-scale-up-threshold` (float, default: 0.9): KV cache utilization threshold to scale up decode workers
 * `--decode-kv-scale-down-threshold` (float, default: 0.5): KV cache utilization threshold to scale down decode workers
 * `--prefill-queue-scale-up-threshold` (float, default: 0.5): Queue utilization threshold to scale up prefill workers
@@ -83,7 +83,7 @@ We currently only support one backend:
 
 ### Local Backend
 
-Circus is a Python program which can be used to monitor and control processes and sockets. Dynamo serve uses circus to start each node in a graph and monitors each subprocesses. We leverage a core feature to do this called `Watcher`. A `Watcher` is the target program that you would like to run (which in our case is `serve_dynamo.py`). When planner decides to scale up or down, it will either add or remove a watcher from the existing `circus`.
+Circus is a Python program that can be used to monitor and control processes and sockets. Dynamo serve uses circus to start each node in a graph and monitors each subprocesses. We leverage a core feature to do this called `Watcher`. A `Watcher` is the target program that you would like to run (which in our case is `serve_dynamo.py`). When planner decides to scale up or down, it either adds or removes a watcher from the existing `circus`.
 
 ``` {note}
 Although circus allows you to `increment` an existing watcher, it was not designed to allow variables to be passed in which does not allow us to schedule on a GPU. So instead we start a new watcher per process. When planner decides to add or remove a worker, we have logic to handle this adding/removing and incrementing/decrementing the workers.

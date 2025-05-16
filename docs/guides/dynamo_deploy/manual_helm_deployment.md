@@ -18,7 +18,7 @@ limitations under the License.
 <a id="k8-helm-deploy"></a>
 # Deploying Dynamo Inference Graphs to Kubernetes using Helm
 
-This guide will walk you through the process of deploying an inference graph created using the Dynamo SDK onto a Kubernetes cluster.
+This guide describes the deployment process of an inference graph created using the Dynamo SDK onto a Kubernetes cluster.
 
 While this guide covers deployment of Dynamo inference graphs using Helm, the preferred method to deploy an inference graph is to [deploy with the Dynamo cloud platform](operator_deployment.md). The [Dynamo cloud platform](dynamo_cloud.md) simplifies the deployment and management of Dynamo inference graphs. It includes a set of components (Operator, Kubernetes Custom Resources, etc.) that work together to streamline the deployment and management process.
 
@@ -28,8 +28,6 @@ Once an inference graph is defined using the Dynamo SDK, it can be deployed onto
 2. Intelligently composing the encoded inference graph into a complete deployment on Kubernetes
 3. Enabling autoscaling, monitoring, and observability for the inference graph
 4. Easy administration of deployments via UI
-
-The Dynamo Kubernetes Operator will be released soon.
 
 ## Helm Deployment Guide
 
@@ -106,7 +104,7 @@ helm install --namespace ${NAMESPACE} ${RELEASE_NAME}-etcd \
     --values etcd-values.yaml
 ```
 
-After completing these steps, your cluster will have the necessary messaging and storage infrastructure for running Dynamo inference graphs.
+After completing these steps, your cluster has the necessary messaging and storage infrastructure for running Dynamo inference graphs.
 
 ### Building and Deploying the Pipeline
 

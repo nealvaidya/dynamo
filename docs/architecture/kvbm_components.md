@@ -34,7 +34,7 @@ The \`KvBlockManager\<H, D\>\` acts as a coordinator across memory tiers—host 
 * A remote NIXL agent that allows communication and memory sharing across nodes  
 * A block set registry for remote lookup and import/export of block metadata
 
-Implementation-wise, \`KvBlockManagerState\` holds actual logic: it is initialized via \`KvBlockManagerConfig\`, which merges runtime, model, and layout configs. Remote awareness is injected via \`NixlOptions\`.
+Implementation-wise, \`KvBlockManagerState\` holds actual logic: it's initialized by \`KvBlockManagerConfig\`, which merges runtime, model, and layout configs. Remote awareness is injected by \`NixlOptions\`.
 
 #### Block Layout and Memory Mapping
 
@@ -62,9 +62,9 @@ Each \`BlockPool\<T\>\` (where \`T\` is \`DeviceStorage\`, \`PinnedStorage\`, et
 * \`ActivePool\`: Contains blocks currently in use by sequences  
 * \`InactivePool\`: Recycled blocks ready for allocation. Think free list. 
 
-When a token block is requested (e.g., \`get\_mutable\_block()\`), the allocator pops from \`InactivePool\`, transitions its state, and returns a writable handle. On sequence commit or eviction, blocks are reset and returned to the inactive pool.
+When a token block is requested (for example, \`get\_mutable\_block()\`), the allocator pops from \`InactivePool\`, transitions its state, and returns a writable handle. On sequence commit or eviction, blocks are reset and returned to the inactive pool.
 
-The block lifecycle transitions are tracked via a state machine (\`BlockState\`), which includes:
+The state machine (\`BlockState\`) that tracks the block lifecycle transitions includes:
 
 | State | Description | Ownership | Valid Actions / Transitions |
 | ----- | ----- | ----- | ----- |
@@ -73,7 +73,7 @@ The block lifecycle transitions are tracked via a state machine (\`BlockState\`)
 | Complete | Block is fully filled with token data but not yet visible to others. | Still owned by creator thread | register() → Registered- reset() → Reset |
 | Registered | Block is finalized and visible for reuse. Available in the deduplication cache. Can use block for lookups | Shared ownership (global registry) | Auto drop() → triggers Remove event and transitions to Reset |
 
-The below tables shows the valid transition table of KBVM block manager. 
+The valid KBVM block manager transitions are: 
 
 | From → To | Trigger | Validation |
 | ----- | ----- | ----- |
@@ -102,7 +102,7 @@ The system uses RAII for memory lifecycle management. Every block holds metadata
 * \`PublishHandle\` triggers Register events  
 * Dropping it triggers Remove events
 
-This pattern ensures consistency for shared memory tracking across workers without requiring explicit deallocation logic. The events are propagated in the Dynamo Events plane and any Dynamo component subscribed to the events plane can listen to these changes. It is critical to understand that even the storage provider can subscribe to the events plane and create an internal prefix tree representation tailored and optimized for their platform. 
+This pattern ensures consistency for shared memory tracking across workers without requiring explicit deallocation logic. The events are propagated in the Dynamo Events plane and any Dynamo component subscribed to the events plane can listen to these changes. Note that even the storage provider can subscribe to the events plane and create an internal prefix tree representation tailored and optimized for their platform. 
 
 #### Remote Memory Integration via NIXL
 
@@ -177,7 +177,7 @@ Memory ownership in NIXL is tightly coupled with RAII-based handles:
 
 #### Storage backends and pluggability
 
-Integrating KVBM with storage backend is extremely trivial by extending or wrapping \`NixlEnabledStorage\` to support cross-node RDMA registration. All layouts and block pools are generic over these backends, allowing for fine-grained control over memory tiers.  We are deferring detailed integration guidance as we are actively collaborating with storage partners to simplify and standardize these integration paths. In a future release, we will share concrete examples and pluggable backend templates for file systems, NVMe devices, and RDMA-aware object stores. 
+Integrating KVBM with storage backend is extremely trivial by extending or wrapping \`NixlEnabledStorage\` to support cross-node RDMA registration. All layouts and block pools are generic over these backends, allowing for fine-grained control over memory tiers.  We are deferring detailed integration guidance as we are actively collaborating with storage partners to simplify and standardize these integration paths.
 
 ```
 An example system architecture
@@ -267,7 +267,7 @@ This event-driven indexing allows the storage system to track which KV blocks ar
 * Cold block demotion: Infrequently used blocks can be demoted to slower storage (e.g., HDDs, cloud object storage).  
 * Proactive compaction: If block sizes or prefix patterns indicate fragmentation, the storage backend can coalesce or rewrite blocks.
 
-These optimizations are performed entirely outside of Dynamo, with the assumption that storage providers will adhere to SLA guarantees and volume availability.
+These optimizations are performed entirely outside of Dynamo, with the assumption that storage providers adhere to SLA guarantees and volume availability.
 
 Critically, this entire system is designed to be non-intrusive:
 

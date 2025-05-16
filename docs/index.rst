@@ -80,6 +80,7 @@ and driven by a transparent, OSS (Open Source Software) first development approa
    :caption: Architecture & Features
 
    High Level Architecture <architecture/architecture.md>
+   Distributed Runtime <architecture/distributed_runtime.md>
    Disaggregated Serving <architecture/disagg_serving.md>
    KV Block Manager <architecture/kvbm_intro.rst>
    KV Cache Routing <architecture/kv_cache_routing.md>
@@ -91,9 +92,9 @@ and driven by a transparent, OSS (Open Source Software) first development approa
 
    CLI Overview <guides/cli_overview.md>
    Running Dynamo (dynamo run) <guides/dynamo_run.md>
-   Serving Models (dynamo serve) <guides/dynamo_serve.md>
+   Serving Inference Graphs (dynamo serve) <guides/dynamo_serve.md>
    Building Dynamo (dynamo build) <guides/dynamo_build.md>
-   Deployment (dynamo deploy) <guides/dynamo_deploy/README.md>
+   Deploying Inference Graphs (dynamo deploy) <guides/dynamo_deploy/README.md>
 
 .. toctree::
    :hidden:
@@ -101,6 +102,7 @@ and driven by a transparent, OSS (Open Source Software) first development approa
 
    Writing Python Workers in Dynamo <guides/backend.md>
    Disaggregation and Performance Tuning <guides/disagg_perf_tuning.md>
+   KV Cache Router Performance Tuning <guides/kv_router_perf_tuning.md>
    Planner Benchmark Example <guides/planner_benchmark/benchmark_planner.md>
 
 .. toctree::

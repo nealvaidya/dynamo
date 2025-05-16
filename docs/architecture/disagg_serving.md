@@ -1,3 +1,21 @@
+<!--
+SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. 
+All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
 # Dynamo Disaggregation: Separating Prefill and Decode for Enhanced Performance
 
 The prefill and decode phases of LLM requests have different computation characteristics and memory footprints. Disaggregating these phases into specialized llm engines allows for better hardware allocation, improved scalability, and overall enhanced performance. For example, using a larger TP for the memory-bound decoding phase while a smaller TP for the computation-bound prefill phase allows both phases to be computed efficiently. In addition, for requests with long context, separating their prefill phase into dedicated prefill engines allows the ongoing decoding requests to be efficiently processed without being blocked by these long prefills.
@@ -103,7 +121,7 @@ The prefill queue and NIXL-based KV transfer design in Dynamo naturally allows r
 
 #### Auto-Discovery for new workers
 
-In Dynamo, we use etcd (a distributed key-value pair store) as a way to register and discover new components. When a new decode/aggregated worker starts, it will add it's endpoint information to etcd allowing the router to discover it and route requests to it. For the KV-cache transfer process, newly added decode workers will put memory descriptors of their kv cache (used in NIXL transfer) in etcd. Newly added prefill workers also register with etcd for discovery and simply start pulling prefill requests from the global prefill queue after they spin up. Prefill workers will lazy-pull the descriptors when they start serving a remote prefill request for the first time.
+In Dynamo, we use etcd (a distributed key-value pair store) as a way to register and discover new components. When a new decode/aggregated worker starts, it adds its endpoint information to `etcd` allowing the router to discover it and route requests to it. For the KV-cache transfer process, newly added decode workers put memory descriptors of their kv cache (used in NIXL transfer) in etcd. Newly added prefill workers also register with `etcd` for discovery and simply start pulling prefill requests from the global prefill queue after they spin up. Prefill workers lazy-pull the descriptors when they start serving a remote prefill request for the first time.
 
 You can watch this happen live by running the following:
 

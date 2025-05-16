@@ -1,8 +1,25 @@
+<!--
+SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
 # Dynamo SDK
 
 ## Introduction
 
-Dynamo is a flexible and performant distributed inferencing solution for large-scale deployments. It is an ecosystem of tools, frameworks, and abstractions that makes the design, customization, and deployment of frontier-level models onto datacenter-scale infrastructure easy to reason about and optimized for your specific inferencing workloads. Dynamo's core is written in Rust and contains a set of well-defined Python bindings. Docs and examples for those can be found [here](./python_bindings.md).
+Dynamo is a flexible and performant distributed inferencing solution for large-scale deployments. It is an ecosystem of tools, frameworks, and abstractions that makes the design, customization, and deployment of frontier-level models onto datacenter-scale infrastructure easy to reason about and optimized for your specific inferencing workloads. Dynamo's core is written in Rust and contains a set of well-defined Python bindings. See Python Bindings](./python_bindings.md).
 
 Dynamo SDK is a layer on top of the core. It is a Python framework that makes it easy to create inference graphs and deploy them locally and onto a target K8s cluster. The SDK was heavily inspired by [BentoML's](https://github.com/bentoml/BentoML) open source deployment patterns and leverages many of its core primitives. The Dynamo CLI is a companion tool that allows you to spin up an inference pipeline locally, containerize it, and deploy it. You can find a toy hello-world example and instructions for deploying it [here](../examples/hello_world.md).
 
@@ -74,7 +91,7 @@ Dynamo follows a class-based architecture similar to BentoML making it intuitive
 2. An `__init__` method for standard initialization
 3. Optional lifecycle hooks like `@async_on_start` and `@async_on_shutdown`
 4. Endpoints defined with `@dynamo_endpoint()`. Optionally, an endpoint can be given a name
-   via `@dynamo_endpoint("my_endpoint_name")`, but otherwise will default to the name of the
+   via `@dynamo_endpoint("my_endpoint_name")`, but otherwise defaults to the name of the
    function being decorated if omitted.
 
 This approach provides a clean separation of concerns and makes the service structure easy to understand.
@@ -96,7 +113,9 @@ service_b = depends(ServiceB)
 result = await service_b.preprocess(data)
 ```
 
-**NOTE** - through the SDK, we also provide you with a way to access the underlying bindings if you need. Sometimes you might want to write complicated logic that causes you to directly create a client to another Service without depending on it. You can do this via:
+```{note}
+Through the SDK, we also provide you with a way to access the underlying bindings if you need. Sometimes you might want to write complicated logic that causes you to directly create a client to another Service without depending on it. To do so:
+```
 
 ```python
 import VllmWorker
@@ -365,7 +384,7 @@ LLMService:
 dynamo serve service:LLMService -f prod_config.yaml --LLMService.temperature=0.9
 ```
 
-The service will receive the combined configuration with the command-line value taking precedence, resulting in effective configuration of:
+The service receives the combined configuration with the command-line value taking precedence, resulting in effective configuration of:
 - `dynamo.namespace = "prod"`
 - `resources.gpu = 4`
 - `workers = 8`
@@ -383,7 +402,7 @@ The service will receive the combined configuration with the command-line value 
 4. **Use CLI for Quick Testing**: Override specific values for experimentation
 5. **Document Configuration Keys**: Make sure to document all available configuration options
 
-Following these practices will help you create flexible and maintainable Dynamo services that can be easily configured for different environments and use cases.
+Following these practices help create flexible and maintainable Dynamo services that can be easily configured for different environments and use cases.
 
 ### Deploying a Single Service
 You can deploy a single service for local development even if you have a dependancy graph defined using `depends()` using `dynamo serve --service-name <ClassName> <entrypoint> <configuration arguments>`. You can see an example of this in our multinode documentation [here](../examples/multinode.md).
@@ -404,7 +423,7 @@ Lets take the example of a `Processor` component. This component can currently d
 1. Process a request and send it to a `Router` to decide what worker to send it to.
 2. Process a request and send it to a `Worker` directly.
 
-A snippet of the Processor is shown below:
+Consider this snippet of the Processor:
 
 ```python
 class Processor(ProcessMixIn):
@@ -418,10 +437,10 @@ class Processor(ProcessMixIn):
     # logic for processing a request based on router or worker
 ```
 
-You can think of all the depends statements as the maximal set of edges for the processor. At runtime, you may want to follow only a single path. By default, our processor will spin up both the VllmWorker and Router as separate services (because `depends()` is defined for both). However, if you want to only spin up the Router, you can do this by linking the Router to the Processor which will remove the `worker` dependency from the Processor.
+Think of all the depends statements as the maximal set of edges for the processor. At runtime, you may want to follow only a single path. By default, our processor spins up both the VllmWorker and Router as separate services (because `depends()` is defined for both). However, if you want to only spin up the Router, you can do this by linking the Router to the Processor that removes the `worker` dependency from the Processor.
 
 ```python
 Processor.link(Router)
 ```
 
-This will remove the `worker` dependency from the Processor and only spin up the Router.
+This removes the `worker` dependency from the Processor and only spin up the Router.

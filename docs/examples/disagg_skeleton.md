@@ -1,3 +1,21 @@
+<!--
+SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. 
+All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
 # Deployment Examples
 
 This directory contains a hello world example which implements a simplified disaggregated serving architecture used for deploying Large Language Models (LLMs). It removes the LLM related inference code and focuses on how Dynamo handles routing, task queue and metadata communication between prefill and decode workers.
@@ -36,7 +54,7 @@ This figure shows an overview of the major components to deploy:
 
 ## The Aggregated Deployment
 
-In this example, we will use 2 nodes to demo the disagg serving.
+This example uses 2 nodes to demo the disagg serving.
 - Node 1
   - Runs NATS and etcd services
   - Deploys Frontend, Processor and Router
@@ -97,7 +115,7 @@ curl -X 'POST' \
   "request_id":"id_number"
 }'
 ```
-6. Then modify the prompt and you will notice prompts with similar prefix will be routed to the same worker due to the simply routing algorithm used in this demo. For example, following query will be routed to the worker proceesed "Tell me a joke" prompt.
+6. Then modify the prompt; prompts with similar prefixes are routed to the same worker due to the routing algorithm used in this demo. For example, following query is routed to the worker that proceesed `Tell me a joke` prompt.
 ```
 curl -X 'POST' \
   'http://localhost:8000/generate' \
@@ -112,7 +130,7 @@ curl -X 'POST' \
 
 ## The Disaggregated Deployment
 
-In this example, we will use 3 nodes to demo the disagg serving.
+This example uses 3 nodes to demo the disagg serving.
 - Node 1
   - Runs NATS and etcd services
   - Deploys Frontend and Processor

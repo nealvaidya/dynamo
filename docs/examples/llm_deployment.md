@@ -79,21 +79,22 @@ docker compose -f deploy/metrics/docker-compose.yml up -d
 ./container/build.sh --framework vllm --platform linux/arm64
 ```
 
-> [!NOTE]
-> Building a vLLM docker image for ARM machines currently involves building vLLM from source,
-> which has known issues with being slow and requiring a lot of system RAM:
-> https://github.com/vllm-project/vllm/issues/8878
->
-> You can tune the number of parallel build jobs for building VLLM from source
-> on ARM based on your available cores and system RAM with `VLLM_MAX_JOBS`.
->
-> For example, on an ARM machine with low system resources:
-> `./container/build.sh --framework vllm --platform linux/arm64 --build-arg VLLM_MAX_JOBS=2`
->
-> For example, on a GB200 which has very high CPU cores and memory resource:
-> `./container/build.sh --framework vllm --platform linux/arm64 --build-arg VLLM_MAX_JOBS=64`
->
-> When vLLM has pre-built ARM wheels published, this process can be improved.
+```{note}
+Building a vLLM docker image for ARM machines currently involves building vLLM from source,
+which has known issues with being slow and requiring a lot of system RAM:
+https://github.com/vllm-project/vllm/issues/8878
+
+You can tune the number of parallel build jobs for building VLLM from source
+on ARM based on your available cores and system RAM with `VLLM_MAX_JOBS`.
+
+For example, on an ARM machine with low system resources:
+`./container/build.sh --framework vllm --platform linux/arm64 --build-arg VLLM_MAX_JOBS=2`
+
+For example, on a GB200 which has very high CPU cores and memory resource:
+`./container/build.sh --framework vllm --platform linux/arm64 --build-arg VLLM_MAX_JOBS=64`
+
+When vLLM has pre-built ARM wheels published, this process can be improved.
+```
 
 ### Run container
 
@@ -189,7 +190,7 @@ These examples can be deployed to a Kubernetes cluster using [Dynamo Cloud](../.
 You must have first followed the instructions in [deploy/cloud/helm/README.md](../../deploy/cloud/helm/README.md) to install Dynamo Cloud on your Kubernetes cluster. [deploy/cloud/helm]
 
 ```{note}
-The `KUBE_NS` variable in the following steps must match the Kubernetes namespace where you installed Dynamo Cloud. You must also expose the `dynamo-store` service externally. This will be the endpoint the CLI uses to interface with Dynamo Cloud.
+The `KUBE_NS` variable in the following steps must match the Kubernetes namespace where you installed Dynamo Cloud. You must also expose the `dynamo-store` service externally. This isthe endpoint the CLI uses to interface with Dynamo Cloud.
 ```
 
 ### Deployment Steps

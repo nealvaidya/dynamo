@@ -1,3 +1,21 @@
+<!--
+SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. 
+All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
 # Getting Started
 
 ## Development Environment
@@ -31,12 +49,12 @@ pip install ai-dynamo[all]
 ```
 
 ```{note}
-To ensure compatibility, please refer to the examples in the release branch or tag that matches the version you installed.
+To ensure compatibility, use the examples in the release branch or tag that matches the version you installed.
 ```
 
 ## Building the Dynamo Base Image
 
-Although not needed for local development, deploying your Dynamo pipelines to Kubernetes will require you to build and push a Dynamo base image to your container registry. You can use any container registry of your choice, such as:
+Although not needed for local development, deploying your Dynamo pipelines to Kubernetes requires you to build and push a Dynamo base image to your container registry. You can use any container registry of your choice, such as:
 - Docker Hub (docker.io)
 - NVIDIA NGC Container Registry (nvcr.io)
 - Any private registry
@@ -85,19 +103,18 @@ Dynamo provides a simple way to spin up a local set of inference components incl
 - **Basic and Kv Aware Router**–Route and load balance traffic to a set of workers.
 - **Workers**–Set of pre-configured LLM serving engines.
 
-To run a minimal configuration you can use a pre-configured
-example.
+To run a minimal configuration you can use a pre-configured example.
 
 ### Start Dynamo Distributed Runtime Services
 
-First start the Dynamo Distributed Runtime services:
+To start the Dynamo Distributed Runtime services the first time:
 
 ```bash
 docker compose -f deploy/docker-compose.yml up -d
 ```
 ### Start Dynamo LLM Serving Components
 
-Next serve a minimal configuration with an http server, basic
+Next, serve a minimal configuration with an http server, basic
 round-robin router, and a single worker.
 
 ```bash
@@ -123,9 +140,9 @@ curl localhost:8000/v1/chat/completions   -H "Content-Type: application/json"   
 
 ## Local Development
 
-If you use vscode or cursor, use the .devcontainer folder built on [Microsofts Extension](https://code.visualstudio.com/docs/devcontainers/containers). For instructions see the [ReadMe](https://github.com/ai-dynamo/dynamo/blob/main/.devcontainer/README.md) for more details.
+If you use vscode or cursor, use the .devcontainer folder built on [Microsofts Extension](https://code.visualstudio.com/docs/devcontainers/containers). For instructions, see the [ReadMe](https://github.com/ai-dynamo/dynamo/blob/main/.devcontainer/README.md).
 
-Otherwise, to develop locally, we recommend working inside of the container
+Otherwise, to develop locally, we recommend working inside of the container:
 
 ```bash
 ./container/build.sh
@@ -144,7 +161,7 @@ export PYTHONPATH=$PYTHONPATH:/workspace/deploy/dynamo/sdk/src:/workspace/compon
 
 ### Conda Environment
 
-Alternately, you can use a conda environment
+Alternately, you can use a Conda environment:
 
 ```bash
 conda activate <ENV_NAME>

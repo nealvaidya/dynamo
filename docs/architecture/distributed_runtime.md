@@ -1,3 +1,20 @@
+<!--
+SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
 # Dynamo Distributed Runtime
 
 ## Overview
@@ -9,7 +26,7 @@ Dynamo `DistributedRuntime` is the core infrastructure in dynamo that enables di
 - `Component`: A `Component` is a discoverable object within a `Namespace` that represents a logical unit of workers.
 - `Endpoint`: An `Endpoint` is a network-accessible service that provides a specific service or function.
 
-While theoretically each `DistributedRuntime` can have multiple `Namespace`s as long as their names are unique (similar logic also applies to `Component/Namespace` and `Endpoint/Component`), in practice, each dynamo components typically are deployed with its own process and thus has its own `DistributedRuntime` object. However, they share the same namespace to discover each other, which will be covered later.
+While theoretically each `DistributedRuntime` can have multiple `Namespace`s as long as their names are unique (similar logic also applies to `Component/Namespace` and `Endpoint/Component`), in practice, each dynamo components typically are deployed with its own process and thus has its own `DistributedRuntime` object. However, they share the same namespace to discover each other.
 
 For example, the deployment configuration `examples/llm/configs/disagg.yaml` have four workers:
 
@@ -23,25 +40,26 @@ Since the four workers are deployed in different processes, each of them have th
 
 In this section, we explain what happens under the hood when `DistributedRuntime/Namespace/Component/Endpoint` objects are created. There are two modes for `DistributedRuntime` initialization: dynamic and static. In static mode, components and endpoints are defined using known addresses and do not change during runtime. In dynamic modes, components and endpoints are discovered through the network and can change during runtime. We focus on the dynamic mode in the rest of this document. Static mode is basically dynamic mode without registration and discovery and hence does not rely on ETCD.
 
-> [!CAUTION]
-> The hierarchy and naming in ETCD and NATS might be changed and this document might not reflect the latest changes. However, the main idea would remain the same.
+```{caution}
+The hierarchy and naming in ETCD and NATS may change over time, and this document might not reflect the latest changes. Regardless of such changes, the main concepts would remain the same.
+```
 
-- `DistributedRuntime`: When a `DistributedRuntime` object is created, it will establish connections to the following two services:
+- `DistributedRuntime`: When a `DistributedRuntime` object is created, it establishes connections to the following two services:
     - ETCD (dynamic mode only): for service discovery. In static mode, `DistributedRuntime` can operate without ETCD.
     - NATS (both static and dynamic mode): for messaging.
 
   where ETCD and NATS are two global services (there could be multiple ETCD and NATS services for high availability).
 
-  For ETCD, it also creates a primary lease and spin up a background task to keep the lease alive. All objects registered under this `DistributedRuntime` will use this lease_id to maintain their life cycle. There is also a cancellation token that is tied to the primary lease. When the cancellation token is triggered or the background task failed, the primary lease will be revoked or expired and the kv pairs stored with this lease_id will be removed.
+  For ETCD, it also creates a primary lease and spin up a background task to keep the lease alive. All objects registered under this `DistributedRuntime` use this lease_id to maintain their life cycle. There is also a cancellation token that is tied to the primary lease. When the cancellation token is triggered or the background task failed, the primary lease is revoked or expired and the kv pairs stored with this lease_id is removed.
 - `Namespace`: `Namespace`s are primarily a logical grouping mechanism and is not registered in ETCD. It provides the root path for all components under this `Namespace`.
-- `Component`: When a `Component` object is created, similar to `Namespace`, it will not be registered in ETCD. When `create_service` is called, it creates a NATS service group using `{namespace_name}.{service_name}` and registers a service in the registry of the `Component`, where the registry is an internal data structure that tracks all services and endpoints within the `DistributedRuntime`.
+- `Component`: When a `Component` object is created, similar to `Namespace`, it isn't be registered in ETCD. When `create_service` is called, it creates a NATS service group using `{namespace_name}.{service_name}` and registers a service in the registry of the `Component`, where the registry is an internal data structure that tracks all services and endpoints within the `DistributedRuntime`.
 - `Endpoint`: When an Endpoint object is created and started, it performs two key registrations:
   - NATS Registration: The endpoint is registered with the NATS service group created during service creation. The endpoint is assigned a unique subject following the naming: `{namespace_name}.{service_name}.{endpoint_name}-{lease_id_hex}`.
-  - ETCD Registration: The endpoint information is stored in ETCD at a path following the naming: `/services/{namespace}/{component}/{endpoint}-{lease_id}`. Note that the endpoints of different workers of the same type (i.e., two `PrefillWorker`s in one deployment) will share the same `Namespace`, `Componenet`, and `Endpoint` name. They are distinguished by their different primary `lease_id` of their `DistributedRuntime`.
+  - ETCD Registration: The endpoint information is stored in ETCD at a path following the naming: `/services/{namespace}/{component}/{endpoint}-{lease_id}`. Note that the endpoints of different workers of the same type (i.e., two `PrefillWorker`s in one deployment) share the same `Namespace`, `Componenet`, and `Endpoint` name. They are distinguished by their different primary `lease_id` of their `DistributedRuntime`.
 
 ## Calling Endpoints
 
-Dynamo uses `Client` object to call an endpoint. When a `Client` objected is created, it is given the name of the `Namespace`, `Component`, and `Endpoint`. It then sets up an ETCD watcher to monitor the prefix `/services/{namespace}/{component}/{endpoint}`. The ETCD watcher will continuously updates the `Client` with the information, including `lease_id` and NATS subject of the available `Endpoint`s.
+Dynamo uses `Client` object to call an endpoint. When a `Client` objected is created, it is given the name of the `Namespace`, `Component`, and `Endpoint`. It then sets up an ETCD watcher to monitor the prefix `/services/{namespace}/{component}/{endpoint}`. The ETCD watcher continuously updates the `Client` with the information, including `lease_id` and NATS subject of the available `Endpoint`s.
 
 The user can decide which load balancing strategy to use when calling the `Endpoint` from the `Client`, which is done in [PushRouter](/lib/runtime/src/pipeline/network/egress/push_router.rs). Dynamo supports three load balancing strategies:
 

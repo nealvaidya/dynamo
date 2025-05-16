@@ -1,11 +1,25 @@
+<!--
+SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. 
+All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
 # Multinode Examples
 
-Table of Contents
-- [Single node sized models](#single-node-sized-models)
-- [Multi-node sized models](#multi-node-sized-models)
-
 ## Single node sized models
-You can deploy dynamo on multiple nodes via NATS/ETCD based discovery and communication. Here's an example of deploying disaggregated serving on 3 nodes using `nvidia/Llama-3.1-405B-Instruct-FP8`. Each node will need to be properly configured with Infiniband and/or RoCE for communication between decode and prefill workers.
+You can deploy dynamo on multiple nodes via NATS/ETCD based discovery and communication. Here's an example of deploying disaggregated serving on 3 nodes using `nvidia/Llama-3.1-405B-Instruct-FP8`. Each node must be properly configured with Infiniband and/or RoCE for communication between decode and prefill workers.
 
 ##### Disaggregated Deployment with KV Routing
 - Node 1: Frontend, Processor, Router, Decode Worker
@@ -14,13 +28,13 @@ You can deploy dynamo on multiple nodes via NATS/ETCD based discovery and commun
 
 Note that this can be easily extended to more nodes. You can also run the Frontend, Processor, and Router on a separate CPU only node if you'd like as long as all nodes have access to the NATS/ETCD endpoints!
 
-**Step 1**: Start NATS/ETCD on your head node. Ensure you have the correct firewall rules to allow communication between the nodes as you will need the NATS/ETCD endpoints to be accessible by all other nodes.
+**Step 1**: Start NATS/ETCD on your head node. Ensure you have the correct firewall rules to allow communication between the nodes the NATS/ETCD endpoints must be accessible by all other nodes.
 ```bash
 # node 1
 docker compose -f deploy/metrics/docker-compose.yml up -d
 ```
 
-**Step 2**: Create the inference graph for this node. Here we will use the `agg_router.py` (even though we are doing disaggregated serving) graph because we want the `Frontend`, `Processor`, `Router`, and `VllmWorker` to spin up (we will spin up the other decode worker and prefill worker separately on different nodes later).
+**Step 2**: Create the inference graph for this node. Here we use the `agg_router.py` (even though we are doing disaggregated serving) graph because we want the `Frontend`, `Processor`, `Router`, and `VllmWorker` to spin up (we spin up the other decode worker and prefill worker separately on different nodes later).
 
 ```python
 # graphs/agg_router.py
@@ -59,7 +73,7 @@ dynamo serve components.prefill_worker:PrefillWorker -f ./configs/multinode-405b
 ```
 
 **Step 7**: [Optional] Start more decode workers on other nodes
-This example can be extended to more nodes as well. For example, if you'd like to spin up another decode worker, you can use
+This example can be extended to more nodes as well. For example, if you want to spin up another decode worker, you can use
 ```bash
 # node X
 export NATS_SERVER = '<your-nats-server-address>' # note this should start with nats://...
@@ -69,9 +83,9 @@ cd $DYNAMO_HOME/examples/llm
 dynamo serve components.worker:VllmWorker -f ./configs/multinode-405b.yaml --service-name VllmWorker
 ```
 
-Note the use of `--service-name`. This will only spin up the worker that you are requesting and ignore any `depends` statements.
+Note the use of `--service-name`. This only spins up the worker that you are requesting and ignore any `depends` statements.
 
-### Client
+###### Client
 
 In another terminal:
 ```bash
@@ -102,7 +116,7 @@ Multinode model support is coming soon. You can track progress [here](https://gi
 The steps for aggregated deployment of multi-node sized models is similar to
 single-node sized models, except that you need to first configure the nodes
 to be interconnected according to the framework's multi-node deployment guide.
-In the below example, vLLM will be used as the framework to serve `DeepSeek-R1` model
+In the below example, vLLM is be used as the framework to serve `DeepSeek-R1` model
 using tensor parallel 16 on two H100x8 nodes.
 
 **Step 1**: On each of the nodes, set up Ray cluster so that vLLM can access the resource
@@ -155,7 +169,7 @@ cd $DYNAMO_HOME/examples/llm
 dynamo serve graphs.agg:Frontend -f ./configs/multinode_agg_r1.yaml
 ```
 
-### Client
+###### Client
 
 In another terminal, you can send the same curl request as described above but
 with `"model": "deepseek-ai/DeepSeek-R1"`
@@ -180,10 +194,10 @@ curl <node1-ip>:8000/v1/chat/completions \
 
 ##### Disaggregated Deployment
 
-In this example, we will be deploying two replicas of the model (one prefill worker
-and one decode worker). We will be using 4 H100x8 nodes and group every two of them
+In this example, we deploy two replicas of the model (one prefill worker
+and one decode worker). We use 4 H100x8 nodes and group every two of them
 into one Ray cluster in the same way as described in aggregated deployment.
-However, for etcd and nats server, we will only run them in
+However, for etcd and nats server, we only run them in
 one node and let's consider that node to be the head node of the whole deployment.
 
 Note that if you are starting etcd server directly instead of using `docker compose`,
@@ -200,7 +214,7 @@ two independent Ray cluster, each has access to 16 GPUs.
 on one of the node for each Ray cluster, using the configuration file,
 `configs/mutinode_disagg_r1.yaml`.
 
-For decode, below command will be used and the node will be the entry point of
+For decode, the below command is used; the node is the entry point of
 the whole deployment. In other words, the ip of the node should be used to send
 requests to.
 ```bash
@@ -222,7 +236,7 @@ cd $DYNAMO_HOME/examples/llm
 dynamo serve components.prefill_worker:PrefillWorker -f ./configs/mutinode_disagg_r1.yaml
 ```
 
-### Client
+###### Client
 
 In another terminal, you can send the same curl request as described in
 [aggregated deployment](#aggregated-deployment), addressing to the ip of

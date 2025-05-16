@@ -1,7 +1,24 @@
+<!--
+SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. 
+All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
 
 # High Level Architecture
 
-Dynamo is high-throughput low-latency inference framework designed for serving generative AI and reasoning models in multi-node distributed environments. Dynamo, designed to be inference engine agnostic (supports TRT-LLM, vLLM, SGLang or others), captures LLM-specific capabilities such as
+Dynamo is high-throughput low-latency inference framework designed for serving generative AI and reasoning models in multi-node distributed environments. Designed to be inference engine agnostic (supports TRT-LLM, vLLM, SGLang or others), it captures LLM-specific capabilities such as:
 
 - **Disaggregated prefill & decode inference** – Maximizes GPU throughput and facilitates trade off between throughput and latency.
 - **Dynamic GPU scheduling** – Optimizes performance based on fluctuating demand
@@ -11,7 +28,7 @@ Dynamo is high-throughput low-latency inference framework designed for serving g
 
 Built in Rust for performance and in Python for extensibility, Dynamo is fully open-source and driven by a transparent, OSS (Open Source Software) first development approach
 
-## Motivation
+## Motivation behind Dynamo
 
 Scaling inference for generative AI and reasoning models are fundamentally hard problems—not just in terms of performance, but also in correctness and efficiency. Most inference serving frameworks struggle to handle the sheer complexity of large-scale distributed execution.
 
