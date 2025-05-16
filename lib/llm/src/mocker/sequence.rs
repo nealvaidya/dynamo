@@ -212,6 +212,14 @@ impl ActiveSequence {
             return signals;
         }
 
+        // Free all blocks when we reach max tokens
+        self.free(&mut signals);
+
+        signals
+    }
+
+    /// Free all blocks, generating appropriate signals for each block type
+    fn free(&self, signals: &mut Vec<MoveBlock>) {
         // Collect blocks to deref based on type
         match self.unique_blocks.last() {
             Some(UniqueBlock::PartialBlock(uuid)) => {
@@ -235,9 +243,7 @@ impl ActiveSequence {
                     signals.push(MoveBlock::Deref(self.unique_blocks.clone()));
                 }
             }
-        };
-
-        signals
+        }
     }
 }
 
