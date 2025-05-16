@@ -21,6 +21,17 @@ use super::*;
 use pyo3::PyResult;
 use tokio;
 
+mod block;
+mod block_list;
+
+/// Add bingings from this crate to the provided module
+pub fn add_to_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<block::Block>()?;
+    m.add_class::<block_list::BlockList>()?;
+    m.add_class::<BlockManager>()?;
+    Ok(())
+}
+
 #[pyclass]
 pub struct BlockManager {
     // TODO: Can this be implicitly created and referenced?
