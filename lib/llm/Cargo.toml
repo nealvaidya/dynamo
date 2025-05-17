@@ -134,6 +134,6 @@ insta = { version = "1.41", features = [
 
 
 [[bin]]
-name = "bench_block_manager"
+name = "block_manager_bench"
 path = "bin/bench_block_manager.rs"
 required-features = ["block-manager-bench"]
