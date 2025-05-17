@@ -102,11 +102,30 @@ def _handle_deploy_create(
     configure_target_environment(TargetEnum.BENTO)
     svc = find_and_load_service(pipeline)
     pipeline_services = svc.all_services()
+
+    def extract_apis_from_service(svc):
+        apis = {}
+        for name, endpoint in getattr(svc, "get_endpoints", lambda: {{}})().items():
+            # Try to extract route, doc, input, output from endpoint
+            route = getattr(endpoint, "name", f"/{name}")
+            doc = getattr(endpoint, "__doc__", "") or ""
+            input_type = getattr(endpoint, "input_type", "Json")
+            output_type = getattr(endpoint, "output_type", "Json")
+            apis[name] = {
+                "route": route,
+                "doc": doc,
+                "input": input_type,
+                "output": output_type,
+            }
+        return apis
+
     services_for_deployment = [
         Service(
             name=svc.name,
             namespace=svc.config["dynamo"]["namespace"],
             envs=svc.envs,
+            apis=extract_apis_from_service(svc),
+            size_bytes=getattr(svc, "size_bytes", 0),
             # TODO: add the rest later
         )
         for svc in pipeline_services.values()

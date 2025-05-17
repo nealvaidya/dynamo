@@ -108,6 +108,8 @@ class Service:
     envs: list[Env] = field(default_factory=list)
     secrets: list[str] = field(default_factory=list)
     scaling: ScalingPolicy = field(default_factory=lambda: ScalingPolicy(policy="none"))
+    apis: dict = field(default_factory=dict)
+    size_bytes: int = 0
 
 
 @dataclass

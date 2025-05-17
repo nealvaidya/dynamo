@@ -50,7 +50,6 @@ class KubernetesDeploymentManager(DeploymentManager):
         name, version = parts
         description = f"Auto-registered by Dynamo's KubernetesDeploymentManager for {name}:{version}"
 
-        # --- Component creation ---
         comp_url = f"{endpoint}/api/v1/dynamo_components"
         comp_payload = {
             "name": name,
@@ -63,22 +62,18 @@ class KubernetesDeploymentManager(DeploymentManager):
         if resp.status_code not in (200, 201, 409):
             raise RuntimeError(f"Failed to create component: {resp.text}")
 
-        # --- Manifest construction ---
         # Try to extract manifest info from service if available, else use defaults
         manifest = {
             "service": name,
-            "bentoml_version": getattr(service, "bentoml_version", "0.0.0"),
             "apis": getattr(service, "apis", {}),
             "size_bytes": getattr(service, "size_bytes", 0),
         }
 
-        # --- Component version creation ---
         ver_url = f"{endpoint}/api/v1/dynamo_components/{name}/versions"
         build_at = kwargs.get("build_at")
         if not build_at:
             build_at = datetime.utcnow()
         if isinstance(build_at, str):
-            # Try to parse string to datetime if user passed as string
             try:
                 build_at = datetime.fromisoformat(build_at)
             except Exception:
