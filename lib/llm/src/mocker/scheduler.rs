@@ -26,6 +26,14 @@ use tokio::time::{interval, Duration};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+/// Debug information structure sent through the debug channel
+#[derive(Debug)]
+pub struct DebugInfo {
+    pub waiting: usize,
+    pub running: usize,
+    pub capacity: usize,
+}
+
 /// Enum representing either a direct request or an active sequence
 pub enum Request {
     Direct(DirectRequest),
@@ -49,6 +57,7 @@ pub struct Scheduler {
     background_handle: Option<JoinHandle<()>>,
     request_tx: mpsc::Sender<DirectRequest>,
     cancellation_token: CancellationToken,
+    debug_tx: Option<mpsc::Sender<DebugInfo>>,
 }
 
 impl Scheduler {
@@ -59,7 +68,7 @@ impl Scheduler {
         block_size: usize,
         chunk_size: Option<usize>,
         output_tx: Option<mpsc::Sender<Uuid>>,
-        enable_debug: bool,
+        debug_tx: Option<mpsc::Sender<DebugInfo>>,
     ) -> Self {
         // Create KvManager internally
         let kv_manager = KvManager::new(kv_capacity, block_size);
@@ -90,28 +99,31 @@ impl Scheduler {
         let chunk_size_clone = chunk_size;
         let prefill_costs_clone = prefill_costs.clone();
         let output_tx_clone = output_tx.clone();
-        let enable_debug_clone = enable_debug;
+        let debug_tx_clone = debug_tx.clone();
 
         // Spawn main background task with cancellation token
         let background_handle = tokio::spawn(async move {
+            let mut debug_interval = interval(Duration::from_millis(500));
             let mut schedule_interval = interval(Duration::from_millis(5));
             let mut simulate_interval = interval(Duration::from_millis(1));
-
-            // Create debug ticker that runs every 500ms if debug is enabled
-            let mut debug_interval = interval(Duration::from_millis(500));
 
             loop {
                 tokio::select! {
                     biased;
 
-                    // Debug ticker - only active when enable_debug is true
-                    _ = debug_interval.tick(), if enable_debug_clone => {
+                    // Debug ticker - only active when debug_tx is Some
+                    _ = debug_interval.tick(), if debug_tx_clone.is_some() => {
                         let waiting = state_clone.lock().await.waiting_requests.len();
                         let running = state_clone.lock().await.running_requests.len();
                         let capacity = kv_manager_clone.lock().await.current_capacity();
 
-                        eprintln!("Debug ticker: waiting={}, running={}, capacity={}",
-                            waiting, running, capacity);
+                        if let Some(tx) = &debug_tx_clone {
+                            let _ = tx.try_send(DebugInfo {
+                                waiting,
+                                running,
+                                capacity,
+                            });
+                        }
                     }
 
                     // Enqueue new request
@@ -133,23 +145,22 @@ impl Scheduler {
                         // as an ActiveSequence for future scheduling attempts. This implements First-Come-First-Served (FCFS)
                         // scheduling, as future requests cannot be processed until the request at the front of the queue is scheduled.
                         while let Some((_, request)) = state_guard.waiting_requests.front() {
-                            // If we encounter an Active request, break the loop
-                            if matches!(request, Request::Active(_)) {
-                                break;
-                            }
-
-                            // Process the Direct request - at this point it must be a Direct request
-                            let Request::Direct(direct_request) = request else {
-                                panic!("Expected DirectRequest");
+                            // Process the request regardless of its type
+                            let active_sequence = match request {
+                                Request::Direct(direct_request) => {
+                                    // Convert DirectRequest to ActiveSequence
+                                    ActiveSequence::new(
+                                        direct_request.tokens.clone(),
+                                        direct_request.max_output_tokens,
+                                        Some(block_size_clone),
+                                        Some(chunk_size_clone),
+                                    )
+                                },
+                                Request::Active(active_seq) => {
+                                    // Use existing ActiveSequence
+                                    active_seq.clone()
+                                }
                             };
-
-                            // Convert DirectRequest to ActiveSequence
-                            let active_sequence = ActiveSequence::new(
-                                direct_request.tokens.clone(),
-                                direct_request.max_output_tokens,
-                                Some(block_size_clone),
-                                Some(chunk_size_clone),
-                            );
 
                             // Calculate token budget using new_tokens from PrefillCost or treating None as 1
                             let prefill_tokens = prefill_costs_guard.values().map(|cost| {
@@ -175,9 +186,12 @@ impl Scheduler {
                                 // Store the PrefillCost in active_tokens
                                 prefill_costs_guard.insert(uuid, Some(prefill_cost));
                             } else {
-                                // If we can't schedule it, replace the front element with the computed Active request
-                                let (uuid, _) = state_guard.waiting_requests.pop_front().unwrap();
-                                state_guard.waiting_requests.push_front((uuid, Request::Active(active_sequence)));
+                                // Check if this was a direct request that needs conversion
+                                if let Some((_, Request::Direct(_))) = state_guard.waiting_requests.front() {
+                                    // Only convert DirectRequest to ActiveSequence once
+                                    let (uuid, _) = state_guard.waiting_requests.pop_front().unwrap();
+                                    state_guard.waiting_requests.push_front((uuid, Request::Active(active_sequence)));
+                                }
                                 break;
                             }
                         }
@@ -197,6 +211,9 @@ impl Scheduler {
 
                         // Process each running request
                         let mut uuids_to_remove = Vec::new();
+                        // Accumulate total sleep duration
+                        let mut total_sleep_duration = Duration::from_millis(0);
+
                         for (uuid, sequence) in state_guard.running_requests.iter_mut() {
                             // Get the prefill cost for sleep calculation if available
                             let prefill_cost = prefill_costs_guard.get(uuid).and_then(|cost| cost.as_ref());
@@ -204,12 +221,12 @@ impl Scheduler {
                             // Generate token and get signals
                             let signals = sequence.generate();
 
-                            // Calculate sleep duration based on prefill_compute if available
+                            // Accumulate sleep duration based on prefill_compute if available
                             if let Some(cost) = prefill_cost {
-                                let sleep_duration = Duration::from_millis((cost.prefill_compute / 131072.0) as u64);
-                                tokio::time::sleep(sleep_duration).await;
+                                let sleep_ms = (cost.prefill_compute / 131072.0) as u64;
+                                total_sleep_duration += Duration::from_millis(sleep_ms);
                             } else {
-                                tokio::time::sleep(Duration::from_millis(10)).await;
+                                total_sleep_duration += Duration::from_millis(1);
                             }
 
                             // Process all signals with the KvManager
@@ -238,6 +255,11 @@ impl Scheduler {
                             state_guard.running_requests.remove(&uuid);
                             prefill_costs_guard.remove(&uuid);
                         }
+
+                        // Sleep once for the accumulated duration
+                        if total_sleep_duration.as_millis() > 0 {
+                            tokio::time::sleep(total_sleep_duration).await;
+                        }
                     }
                 }
             }
@@ -254,6 +276,7 @@ impl Scheduler {
             background_handle: Some(background_handle),
             request_tx,
             cancellation_token,
+            debug_tx,
         }
     }
 
@@ -295,6 +318,7 @@ impl Clone for Scheduler {
             background_handle: None,
             request_tx: self.request_tx.clone(),
             cancellation_token: self.cancellation_token.clone(),
+            debug_tx: self.debug_tx.clone(),
         }
     }
 }
@@ -330,33 +354,34 @@ mod tests {
         let input_len: usize = 1000;
         let max_output_tokens: usize = 100;
 
-        // Create channels for token output
+        // Create channels for token output and debug info
         let (output_tx, mut output_rx) = mpsc::channel::<Uuid>(1024);
+        let (debug_tx, mut debug_rx) = mpsc::channel::<DebugInfo>(1024);
 
-        // Create scheduler with internal KvManager and debug enabled
+        // Create scheduler with internal KvManager and debug channel
         let scheduler = Scheduler::new(
             kv_capacity,
             watermark,
             block_size,
             Some(chunk_size),
             Some(output_tx),
-            true, // Enable debug
+            Some(debug_tx),
         );
 
         // Create test requests
-        let input_tokens = (0..input_len)
-            .map(|_| rand::random::<u32>() % 50000)
-            .collect::<Vec<_>>();
-
-        // Submit all requests
-        let start_time = std::time::Instant::now();
         for _ in 0..num_requests {
+            // Create unique random token vector for each request
+            let input_tokens = (0..input_len)
+                .map(|_| rand::random::<u32>() % 50000)
+                .collect::<Vec<_>>();
+
             let request = DirectRequest {
-                tokens: input_tokens.clone(),
+                tokens: input_tokens,
                 max_output_tokens,
             };
             scheduler.receive_request(request).await;
         }
+        let start_time = std::time::Instant::now();
 
         // Collect all generated tokens (should be num_requests * max_output_tokens)
         let expected_tokens = num_requests * max_output_tokens as usize;
@@ -368,6 +393,11 @@ mod tests {
 
         loop {
             tokio::select! {
+                biased;
+                Some(debug_info) = debug_rx.recv() => {
+                    println!("Debug ticker: waiting={}, running={}, capacity={}",
+                        debug_info.waiting, debug_info.running, debug_info.capacity);
+                }
                 Some(_) = output_rx.recv() => {
                     received_tokens += 1;
                     if received_tokens == expected_tokens {

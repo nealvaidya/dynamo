@@ -190,6 +190,13 @@ impl KvManager {
         // Calculate new tokens
         let new_tokens = sequence.num_input_tokens - overlap_blocks * self.block_size;
 
+        // // Print the full equation with actual values substituted
+        // println!("{} = {} - ({} * {}) (new_tokens = num_input_tokens - overlap_blocks * block_size)",
+        //     new_tokens,
+        //     sequence.num_input_tokens,
+        //     overlap_blocks,
+        //     self.block_size);
+
         // Return None if new_tokens exceeds tokens_budget
         if new_tokens > tokens_budget {
             return None;
