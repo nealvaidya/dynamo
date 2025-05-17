@@ -50,16 +50,18 @@ def get_deployment_manager(target: str, endpoint: str) -> DeploymentManager:
 def display_deployment_info(
     deployment_manager: DeploymentManager, deployment_id: str
 ) -> None:
-    """Display deployment status and endpoint URLs using rich panels."""
-    status = deployment_manager.get_status(deployment_id)
-    urls = deployment_manager.get_endpoint_urls(deployment_id)
-    console.print(
-        Panel(f"[bold]Status:[/] {status}", title="Deployment Status", style="blue")
-    )
+    """Display deployment summary, status, and endpoint URLs using rich panels."""
+    dep = deployment_manager.get_deployment(deployment_id)
+    name = dep.get("name") or dep.get("uid") or dep.get("id") or deployment_id
+    status = dep.get("status", "unknown")
+    urls = dep.get("urls", [])
+    created_at = dep.get("created_at", "")
+    summary = f"[bold]Name:[/] {name}\n[bold]Status:[/] {status}"
+    if created_at:
+        summary += f"\n[bold]Created:[/] {created_at}"
     if urls:
-        console.print(Panel("\n".join(urls), title="Ingress URLs", style="cyan"))
-    else:
-        console.print(Panel("No URLs available", title="Ingress URLs", style="yellow"))
+        summary += f"\n[bold]URLs:[/] {' | '.join(urls)}"
+    console.print(Panel(summary, title="Deployment", style="cyan"))
 
 
 def _handle_deploy_create(
@@ -279,8 +281,9 @@ def list_deployments(
                     Panel("No deployments found.", title="Deployments", style="yellow")
                 )
             for dep in deployments:
-                console.print(Panel(str(dep), title="Deployment", style="cyan"))
-                display_deployment_info(deployment_manager, dep["id"])
+                dep_id = dep.get("name") or dep.get("uid") or dep.get("id")
+                if dep_id:
+                    display_deployment_info(deployment_manager, dep_id)
     except Exception as e:
         if isinstance(e, RuntimeError) and isinstance(e.args[0], tuple):
             status, msg, url = e.args[0]
