@@ -145,6 +145,12 @@ impl KvManager {
         active + inactive
     }
 
+    /// Get the current capacity as a percentage of the maximum capacity
+    pub fn current_capacity_perc(&self) -> f64 {
+        let current = self.current_capacity() as f64;
+        current / self.max_capacity as f64
+    }
+
     /// Get the keys of inactive blocks
     pub fn get_inactive_blocks(&self) -> Vec<UniqueBlock> {
         self.inactive_blocks.free_table.keys().cloned().collect()
@@ -175,12 +181,9 @@ impl KvManager {
 
         // Calculate current usage and available capacity
         let active_count = self.active_blocks.len();
-        let inactive_count = self.inactive_blocks.num_objects();
 
         // Check if we can schedule based on the watermark
-        if (active_count + inactive_count + new_blocks) as f64
-            > (1.0 - watermark) * self.max_capacity as f64
-        {
+        if (active_count + new_blocks) as f64 > (1.0 - watermark) * self.max_capacity as f64 {
             return None;
         }
 

@@ -13,6 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::kv_router::protocols::ForwardPassMetrics;
 use crate::mocker::kv_manager::KvManager;
 use crate::mocker::protocols::DirectRequest;
 use crate::mocker::protocols::PrefillCost;
@@ -25,14 +26,6 @@ use tokio::task::JoinHandle;
 use tokio::time::{interval, Duration};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
-
-/// Debug information structure sent through the debug channel
-#[derive(Debug)]
-pub struct DebugInfo {
-    pub waiting: usize,
-    pub running: usize,
-    pub capacity: usize,
-}
 
 /// Enum representing either a direct request or an active sequence
 pub enum Request {
@@ -57,7 +50,6 @@ pub struct Scheduler {
     background_handle: Option<JoinHandle<()>>,
     request_tx: mpsc::Sender<DirectRequest>,
     cancellation_token: CancellationToken,
-    debug_tx: Option<mpsc::Sender<DebugInfo>>,
 }
 
 impl Scheduler {
@@ -68,7 +60,6 @@ impl Scheduler {
         block_size: usize,
         chunk_size: Option<usize>,
         output_tx: Option<mpsc::Sender<Uuid>>,
-        debug_tx: Option<mpsc::Sender<DebugInfo>>,
     ) -> Self {
         // Create KvManager internally
         let kv_manager = KvManager::new(kv_capacity, block_size);
@@ -99,32 +90,15 @@ impl Scheduler {
         let chunk_size_clone = chunk_size;
         let prefill_costs_clone = prefill_costs.clone();
         let output_tx_clone = output_tx.clone();
-        let debug_tx_clone = debug_tx.clone();
 
         // Spawn main background task with cancellation token
         let background_handle = tokio::spawn(async move {
-            let mut debug_interval = interval(Duration::from_millis(500));
             let mut schedule_interval = interval(Duration::from_millis(5));
             let mut simulate_interval = interval(Duration::from_millis(1));
 
             loop {
                 tokio::select! {
                     biased;
-
-                    // Debug ticker - only active when debug_tx is Some
-                    _ = debug_interval.tick(), if debug_tx_clone.is_some() => {
-                        let waiting = state_clone.lock().await.waiting_requests.len();
-                        let running = state_clone.lock().await.running_requests.len();
-                        let capacity = kv_manager_clone.lock().await.current_capacity();
-
-                        if let Some(tx) = &debug_tx_clone {
-                            let _ = tx.try_send(DebugInfo {
-                                waiting,
-                                running,
-                                capacity,
-                            });
-                        }
-                    }
 
                     // Enqueue new request
                     Some(request) = request_rx.recv() => {
@@ -135,7 +109,6 @@ impl Scheduler {
 
                     // Try Scheduling Requests
                     _ = schedule_interval.tick() => {
-                        // Acquire locks in the same order as in process_interval to prevent deadlocks
                         let mut state_guard = state_clone.lock().await;
                         let mut prefill_costs_guard = prefill_costs_clone.lock().await;
                         let mut kv_manager_guard = kv_manager_clone.lock().await;
@@ -204,7 +177,6 @@ impl Scheduler {
 
                     // Simulate running requests (prefill + decode)
                     _ = simulate_interval.tick() => {
-                        // Acquire locks in order to prevent deadlocks
                         let mut state_guard = state_clone.lock().await;
                         let mut prefill_costs_guard = prefill_costs_clone.lock().await;
                         let mut kv_manager_guard = kv_manager_clone.lock().await;
@@ -276,7 +248,6 @@ impl Scheduler {
             background_handle: Some(background_handle),
             request_tx,
             cancellation_token,
-            debug_tx,
         }
     }
 
@@ -298,9 +269,36 @@ impl Scheduler {
     }
 
     /// Get the current capacity of the KvManager
-    pub async fn current_capacity(&self) -> usize {
+    pub async fn kv_usage_perc(&self) -> f64 {
         let kv_manager = self.kv_manager.lock().await;
-        kv_manager.current_capacity()
+        kv_manager.current_capacity_perc()
+    }
+
+    /// Returns forward pass metrics for monitoring purposes
+    pub async fn get_forward_pass_metrics(&self) -> ForwardPassMetrics {
+        let state = self.state.lock().await;
+        let kv_manager = self.kv_manager.lock().await;
+
+        // Get the active blocks and total capacity from KvManager
+        let active_blocks_count = kv_manager.active_blocks.len() as u64;
+        let total_capacity = kv_manager.max_capacity as u64;
+
+        // Calculate GPU cache usage percentage
+        let gpu_cache_usage_perc = if total_capacity > 0 {
+            active_blocks_count as f32 / total_capacity as f32
+        } else {
+            0.0
+        };
+
+        ForwardPassMetrics {
+            request_active_slots: state.running_requests.len() as u64,
+            request_total_slots: 420, // Dummy value as specified
+            kv_active_blocks: active_blocks_count,
+            kv_total_blocks: total_capacity,
+            num_requests_waiting: state.waiting_requests.len() as u64,
+            gpu_cache_usage_perc,
+            gpu_prefix_cache_hit_rate: 0.0, // Placeholder value as specified
+        }
     }
 }
 
@@ -318,7 +316,6 @@ impl Clone for Scheduler {
             background_handle: None,
             request_tx: self.request_tx.clone(),
             cancellation_token: self.cancellation_token.clone(),
-            debug_tx: self.debug_tx.clone(),
         }
     }
 }
@@ -346,7 +343,7 @@ mod tests {
     async fn test_scheduler_token_generation() {
         std::env::set_var("RUST_LOG", "debug");
 
-        let kv_capacity: usize = 2000;
+        let kv_capacity: usize = 500;
         let watermark: f64 = 0.01; // 1% watermark
         let block_size: usize = 64;
         let chunk_size: usize = 256;
@@ -354,18 +351,16 @@ mod tests {
         let input_len: usize = 1000;
         let max_output_tokens: usize = 100;
 
-        // Create channels for token output and debug info
+        // Create channel for token output
         let (output_tx, mut output_rx) = mpsc::channel::<Uuid>(1024);
-        let (debug_tx, mut debug_rx) = mpsc::channel::<DebugInfo>(1024);
 
-        // Create scheduler with internal KvManager and debug channel
+        // Create scheduler with internal KvManager
         let scheduler = Scheduler::new(
             kv_capacity,
             watermark,
             block_size,
             Some(chunk_size),
             Some(output_tx),
-            Some(debug_tx),
         );
 
         // Create test requests
@@ -391,13 +386,19 @@ mod tests {
         let timeout = tokio::time::sleep(Duration::from_secs(5));
         tokio::pin!(timeout);
 
+        // Set up debug ticker interval
+        let mut debug_interval = interval(Duration::from_millis(500));
+
         loop {
             tokio::select! {
                 biased;
-                Some(debug_info) = debug_rx.recv() => {
-                    println!("Debug ticker: waiting={}, running={}, capacity={}",
-                        debug_info.waiting, debug_info.running, debug_info.capacity);
+
+                // Manual debug ticker that prints forward pass metrics
+                _ = debug_interval.tick() => {
+                    let metrics = scheduler.get_forward_pass_metrics().await;
+                    println!("Forward Pass Metrics: {:#?}", metrics);
                 }
+
                 Some(_) = output_rx.recv() => {
                     received_tokens += 1;
                     if received_tokens == expected_tokens {
@@ -409,6 +410,7 @@ mod tests {
                     // Reset timeout whenever we receive a token
                     timeout.set(tokio::time::sleep(Duration::from_secs(5)));
                 }
+
                 _ = &mut timeout => {
                     panic!("Test timed out after 5 seconds of inactivity! Received only {} of {} expected tokens",
                            received_tokens, expected_tokens);
