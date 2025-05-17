@@ -48,7 +48,7 @@ def get_deployment_manager(target: str, endpoint: str) -> DeploymentManager:
 
 
 def display_deployment_info(
-    deployment_manager: DeploymentManager, deployment_id: str
+    deployment_manager: DeploymentManager, deployment_id: str, summary: bool = False
 ) -> None:
     """Display deployment summary, status, and endpoint URLs using rich panels."""
     dep = deployment_manager.get_deployment(deployment_id)
@@ -56,11 +56,21 @@ def display_deployment_info(
     status = dep.get("status", "unknown")
     urls = dep.get("urls", [])
     created_at = dep.get("created_at", "")
-    summary = f"[bold]Name:[/] {name}\n[bold]Status:[/] {status}"
+    status_color = {
+        "running": "green",
+        "in_progress": "yellow",
+        "pending": "yellow",
+        "failed": "red",
+        "terminated": "red",
+    }.get(status, "white")
+    summary = (
+        f"[white]Name:[/] [cyan]{name}[/]\n"
+        f"[white]Status:[/] [{status_color}]{status}[/]"
+    )
     if created_at:
-        summary += f"\n[bold]Created:[/] {created_at}"
+        summary += f"\n[white]Created:[/] [magenta]{created_at}[/]"
     if urls:
-        summary += f"\n[bold]URLs:[/] {' | '.join(urls)}"
+        summary += f"\n[white]URLs:[/] [blue]{' | '.join(urls)}[/]"
     console.print(Panel(summary, title="Deployment", style="cyan"))
 
 
@@ -280,10 +290,14 @@ def list_deployments(
                 console.print(
                     Panel("No deployments found.", title="Deployments", style="yellow")
                 )
-            for dep in deployments:
-                dep_id = dep.get("name") or dep.get("uid") or dep.get("id")
-                if dep_id:
-                    display_deployment_info(deployment_manager, dep_id)
+            else:
+                console.print(Panel("[bold]Deployments List[/]", style="blue"))
+                for dep in deployments:
+                    dep_id = dep.get("name") or dep.get("uid") or dep.get("id")
+                    if dep_id:
+                        display_deployment_info(
+                            deployment_manager, dep_id, summary=True
+                        )
     except Exception as e:
         if isinstance(e, RuntimeError) and isinstance(e.args[0], tuple):
             status, msg, url = e.args[0]
