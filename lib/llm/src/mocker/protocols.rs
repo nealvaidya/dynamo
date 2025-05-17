@@ -60,6 +60,13 @@ pub struct DirectRequest {
     pub max_output_tokens: usize,
 }
 
+/// Represents the cost of prefilling content in the cache
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrefillCost {
+    pub new_tokens: usize,
+    pub prefill_compute: f64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

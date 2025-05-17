@@ -15,6 +15,7 @@
 
 use crate::mocker::kv_manager::KvManager;
 use crate::mocker::protocols::DirectRequest;
+use crate::mocker::protocols::PrefillCost;
 use crate::mocker::sequence::ActiveSequence;
 use std::collections::HashMap;
 use std::collections::VecDeque;
@@ -25,8 +26,14 @@ use tokio::time::{interval, Duration};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+/// Enum representing either a direct request or an active sequence
+pub enum Request {
+    Direct(DirectRequest),
+    Active(ActiveSequence),
+}
+
 struct SchedulerState {
-    waiting_requests: VecDeque<(Uuid, DirectRequest)>,
+    waiting_requests: VecDeque<(Uuid, Request)>,
     running_requests: HashMap<Uuid, ActiveSequence>,
 }
 
@@ -34,7 +41,7 @@ struct SchedulerState {
 pub struct Scheduler {
     state: Arc<Mutex<SchedulerState>>,
     kv_manager: Arc<Mutex<KvManager>>, // Now need to protect KvManager with Mutex for thread safety
-    active_tokens: Arc<Mutex<HashMap<Uuid, usize>>>,
+    prefill_costs: Arc<Mutex<HashMap<Uuid, Option<PrefillCost>>>>,
     token_capacity: usize,
     watermark: f64,
     block_size: usize,
@@ -52,11 +59,12 @@ impl Scheduler {
         block_size: usize,
         chunk_size: Option<usize>,
         output_tx: Option<mpsc::Sender<Uuid>>,
+        enable_debug: bool,
     ) -> Self {
         // Create KvManager internally
         let kv_manager = KvManager::new(kv_capacity, block_size);
 
-        let token_capacity = 8192;
+        let token_capacity: usize = 8192;
         let state = Arc::new(Mutex::new(SchedulerState {
             waiting_requests: VecDeque::new(),
             running_requests: HashMap::new(),
@@ -65,7 +73,7 @@ impl Scheduler {
         let kv_manager = Arc::new(Mutex::new(kv_manager));
         let chunk_size = chunk_size.unwrap_or(256);
 
-        let active_tokens = Arc::new(Mutex::new(HashMap::new()));
+        let prefill_costs = Arc::new(Mutex::new(HashMap::<Uuid, Option<PrefillCost>>::new()));
 
         // Create channel for request handling
         let (request_tx, mut request_rx) = mpsc::channel::<DirectRequest>(1024);
@@ -80,37 +88,133 @@ impl Scheduler {
         let watermark_clone = watermark;
         let block_size_clone = block_size;
         let chunk_size_clone = chunk_size;
-        let active_tokens_clone = active_tokens.clone();
+        let prefill_costs_clone = prefill_costs.clone();
         let output_tx_clone = output_tx.clone();
+        let enable_debug_clone = enable_debug;
 
-        // Spawn background task with cancellation token
+        // Spawn main background task with cancellation token
         let background_handle = tokio::spawn(async move {
             let mut schedule_interval = interval(Duration::from_millis(5));
-            let mut process_interval = interval(Duration::from_millis(100));
+            let mut simulate_interval = interval(Duration::from_millis(1));
+
+            // Create debug ticker that runs every 500ms if debug is enabled
+            let mut debug_interval = interval(Duration::from_millis(500));
 
             loop {
                 tokio::select! {
+                    biased;
+
+                    // Debug ticker - only active when enable_debug is true
+                    _ = debug_interval.tick(), if enable_debug_clone => {
+                        let waiting = state_clone.lock().await.waiting_requests.len();
+                        let running = state_clone.lock().await.running_requests.len();
+                        let capacity = kv_manager_clone.lock().await.current_capacity();
+
+                        eprintln!("Debug ticker: waiting={}, running={}, capacity={}",
+                            waiting, running, capacity);
+                    }
+
+                    // Enqueue new request
                     Some(request) = request_rx.recv() => {
                         let uuid = Uuid::new_v4();
                         let mut state = state_clone.lock().await;
-                        state.waiting_requests.push_back((uuid, request));
+                        state.waiting_requests.push_back((uuid, Request::Direct(request)));
                     }
 
-                    _ = process_interval.tick() => {
+                    // Try Scheduling Requests
+                    _ = schedule_interval.tick() => {
+                        // Acquire locks in the same order as in process_interval to prevent deadlocks
+                        let mut state_guard = state_clone.lock().await;
+                        let mut prefill_costs_guard = prefill_costs_clone.lock().await;
+                        let mut kv_manager_guard = kv_manager_clone.lock().await;
+
+                        // Process DirectRequests, converting them to ActiveSequence and scheduling them until we can't
+                        // schedule anymore. Once a request can't be scheduled, it remains at the front of the waiting queue
+                        // as an ActiveSequence for future scheduling attempts. This implements First-Come-First-Served (FCFS)
+                        // scheduling, as future requests cannot be processed until the request at the front of the queue is scheduled.
+                        while let Some((_, request)) = state_guard.waiting_requests.front() {
+                            // If we encounter an Active request, break the loop
+                            if matches!(request, Request::Active(_)) {
+                                break;
+                            }
+
+                            // Process the Direct request - at this point it must be a Direct request
+                            let Request::Direct(direct_request) = request else {
+                                panic!("Expected DirectRequest");
+                            };
+
+                            // Convert DirectRequest to ActiveSequence
+                            let active_sequence = ActiveSequence::new(
+                                direct_request.tokens.clone(),
+                                direct_request.max_output_tokens,
+                                Some(block_size_clone),
+                                Some(chunk_size_clone),
+                            );
+
+                            // Calculate token budget using new_tokens from PrefillCost or treating None as 1
+                            let prefill_tokens = prefill_costs_guard.values().map(|cost| {
+                                match cost {
+                                    Some(cost) => cost.new_tokens,
+                                    None => 0,
+                                }
+                            }).sum::<usize>();
+                            let tokens_budget = token_capacity.saturating_sub(prefill_tokens);
+
+                            // Check if it can be scheduled
+                            if let Some(prefill_cost) = kv_manager_guard.try_schedule(&active_sequence, watermark_clone, tokens_budget) {
+                                // Remove from waiting queue
+                                let (uuid, _) = state_guard.waiting_requests.pop_front().unwrap();
+
+                                // Send create signal to KvManager
+                                if let Some(signal) = active_sequence.creation_signal() {
+                                    kv_manager_guard.process(signal);
+                                }
+
+                                // Add to running requests with the PrefillCost
+                                state_guard.running_requests.insert(uuid, active_sequence);
+                                // Store the PrefillCost in active_tokens
+                                prefill_costs_guard.insert(uuid, Some(prefill_cost));
+                            } else {
+                                // If we can't schedule it, replace the front element with the computed Active request
+                                let (uuid, _) = state_guard.waiting_requests.pop_front().unwrap();
+                                state_guard.waiting_requests.push_front((uuid, Request::Active(active_sequence)));
+                                break;
+                            }
+                        }
+                    }
+
+                    // Check for cancellation
+                    _ = token_clone.cancelled() => {
+                        break;
+                    }
+
+                    // Simulate running requests (prefill + decode)
+                    _ = simulate_interval.tick() => {
                         // Acquire locks in order to prevent deadlocks
                         let mut state_guard = state_clone.lock().await;
+                        let mut prefill_costs_guard = prefill_costs_clone.lock().await;
                         let mut kv_manager_guard = kv_manager_clone.lock().await;
-                        let mut active_tokens_guard = active_tokens_clone.lock().await;
 
                         // Process each running request
                         let mut uuids_to_remove = Vec::new();
                         for (uuid, sequence) in state_guard.running_requests.iter_mut() {
+                            // Get the prefill cost for sleep calculation if available
+                            let prefill_cost = prefill_costs_guard.get(uuid).and_then(|cost| cost.as_ref());
+
                             // Generate token and get signals
                             let signals = sequence.generate();
 
+                            // Calculate sleep duration based on prefill_compute if available
+                            if let Some(cost) = prefill_cost {
+                                let sleep_duration = Duration::from_millis((cost.prefill_compute / 131072.0) as u64);
+                                tokio::time::sleep(sleep_duration).await;
+                            } else {
+                                tokio::time::sleep(Duration::from_millis(10)).await;
+                            }
+
                             // Process all signals with the KvManager
                             for signal in signals {
-                                kv_manager_guard.process(signal);
+                                kv_manager_guard.process(&signal);
                             }
 
                             // Send UUID notification for each generated token
@@ -118,9 +222,9 @@ impl Scheduler {
                                 let _ = tx.try_send(*uuid);
                             }
 
-                            // Only set active tokens to 1 if this is the first token generated
+                            // Set active_tokens to None after a token is generated
                             if sequence.generated_tokens == 1 {
-                                active_tokens_guard.insert(*uuid, 1);
+                                prefill_costs_guard.insert(*uuid, None);
                             }
 
                             // Check if we're done after generating
@@ -132,61 +236,8 @@ impl Scheduler {
                         // Remove completed sequences
                         for uuid in uuids_to_remove {
                             state_guard.running_requests.remove(&uuid);
-                            active_tokens_guard.remove(&uuid);
+                            prefill_costs_guard.remove(&uuid);
                         }
-                    }
-
-                    _ = schedule_interval.tick() => {
-                        let mut state_guard = state_clone.lock().await;
-
-                        // Skip if no waiting requests or get the front request
-                        let request = match state_guard.waiting_requests.front() {
-                            Some((_, request)) => request,
-                            None => continue,
-                        };
-
-                        let mut active_tokens_guard = active_tokens_clone.lock().await;
-                        let current_token_usage: usize = active_tokens_guard.values().sum();
-
-                        // Lock KvManager for capacity check
-                        let mut kv_manager_guard = kv_manager_clone.lock().await;
-
-                        // Check scheduling conditions
-                        let current_capacity = kv_manager_guard.current_capacity();
-                        let max_capacity = kv_manager_guard.max_capacity;
-                        let input_len = request.tokens.len();
-
-                        let can_schedule =
-                            current_token_usage + input_len <= token_capacity &&
-                            current_capacity as f64 <= (1.0 - watermark_clone) * max_capacity as f64;
-
-                        if !can_schedule {
-                            continue;
-                        }
-
-                        // Process the request
-                        let (uuid, request) = state_guard.waiting_requests.pop_front().unwrap();
-
-                        // Create sequence and get initial signal
-                        let (sequence, initial_signal) = ActiveSequence::new(
-                            request.tokens,
-                            Some(block_size_clone),
-                            Some(chunk_size_clone),
-                            request.max_output_tokens,
-                        );
-
-                        // Process initial signal if there is one
-                        if let Some(signal) = initial_signal {
-                            kv_manager_guard.process(signal);
-                        }
-
-                        active_tokens_guard.insert(uuid, input_len);
-                        state_guard.running_requests.insert(uuid, sequence);
-                    }
-
-                    // Check for cancellation
-                    _ = token_clone.cancelled() => {
-                        break;
                     }
                 }
             }
@@ -195,7 +246,7 @@ impl Scheduler {
         Self {
             state,
             kv_manager,
-            active_tokens,
+            prefill_costs,
             token_capacity,
             watermark,
             block_size,
@@ -236,7 +287,7 @@ impl Clone for Scheduler {
         Self {
             state: self.state.clone(),
             kv_manager: self.kv_manager.clone(),
-            active_tokens: self.active_tokens.clone(),
+            prefill_costs: self.prefill_costs.clone(),
             token_capacity: self.token_capacity,
             watermark: self.watermark,
             block_size: self.block_size,
@@ -282,13 +333,14 @@ mod tests {
         // Create channels for token output
         let (output_tx, mut output_rx) = mpsc::channel::<Uuid>(1024);
 
-        // Create scheduler with internal KvManager
+        // Create scheduler with internal KvManager and debug enabled
         let scheduler = Scheduler::new(
             kv_capacity,
             watermark,
             block_size,
             Some(chunk_size),
             Some(output_tx),
+            true, // Enable debug
         );
 
         // Create test requests
@@ -310,8 +362,8 @@ mod tests {
         let expected_tokens = num_requests * max_output_tokens as usize;
         let mut received_tokens = 0;
 
-        // Wait for all tokens to be generated with a timeout
-        let timeout = tokio::time::sleep(Duration::from_secs(30)); // 30 second timeout
+        // Set up a timeout that causes the test to panic if no tokens are received for 5 consecutive seconds.
+        let timeout = tokio::time::sleep(Duration::from_secs(5));
         tokio::pin!(timeout);
 
         loop {
@@ -324,15 +376,15 @@ mod tests {
                         println!("Test completed in: {:?}", elapsed);
                         break;
                     }
+                    // Reset timeout whenever we receive a token
+                    timeout.set(tokio::time::sleep(Duration::from_secs(5)));
                 }
                 _ = &mut timeout => {
-                    panic!("Test timed out! Received only {} of {} expected tokens", received_tokens, expected_tokens);
+                    panic!("Test timed out after 5 seconds of inactivity! Received only {} of {} expected tokens",
+                           received_tokens, expected_tokens);
                 }
             }
         }
-
-        // Verify all tokens were received
-        assert_eq!(received_tokens, expected_tokens);
 
         // Wait to ensure all sequences are cleaned up
         tokio::time::sleep(Duration::from_millis(500)).await;
