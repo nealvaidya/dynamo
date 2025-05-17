@@ -22,23 +22,53 @@ use std::cmp::PartialEq;
 #[derive(Debug, Clone)]
 pub struct ActiveSequence {
     pub unique_blocks: Vec<UniqueBlock>,
-    pub partial_tokens: Vec<u32>,
+    pub tokens: Vec<u32>,
     pub block_size: usize,
     pub chunk_size: usize,
     pub max_output_tokens: usize,
     pub generated_tokens: usize,
     pub num_input_tokens: usize,
-    pub creation_signal: Option<MoveBlock>,
+    creation_signal: Option<MoveBlock>,
 }
 
 impl PartialEq for ActiveSequence {
     fn eq(&self, other: &Self) -> bool {
-        self.unique_blocks == other.unique_blocks
-            && self.partial_tokens == other.partial_tokens
-            && self.block_size == other.block_size
-            && self.chunk_size == other.chunk_size
-            && self.max_output_tokens == other.max_output_tokens
-            && self.num_input_tokens == other.num_input_tokens
+        // Check if basic fields match
+        if self.tokens != other.tokens
+            || self.block_size != other.block_size
+            || self.chunk_size != other.chunk_size
+            || self.max_output_tokens != other.max_output_tokens
+            || self.num_input_tokens != other.num_input_tokens
+            || self.generated_tokens != other.generated_tokens
+        {
+            return false;
+        }
+
+        // Check if both have the same number of blocks
+        if self.unique_blocks.len() != other.unique_blocks.len() {
+            return false;
+        }
+
+        // Compare blocks - we care about block type and hash equality for FullBlocks
+        for (self_block, other_block) in self.unique_blocks.iter().zip(other.unique_blocks.iter()) {
+            match (self_block, other_block) {
+                (UniqueBlock::FullBlock(self_hash), UniqueBlock::FullBlock(other_hash)) => {
+                    if self_hash != other_hash {
+                        return false;
+                    }
+                }
+                (UniqueBlock::PartialBlock(_), UniqueBlock::PartialBlock(_)) => {
+                    // Both are PartialBlocks, we don't need to compare UUIDs
+                    continue;
+                }
+                _ => {
+                    // One is FullBlock and one is PartialBlock
+                    return false;
+                }
+            }
+        }
+
+        true
     }
 }
 
@@ -56,7 +86,6 @@ impl ActiveSequence {
         let num_input_tokens = tokens.len();
 
         let mut unique_blocks = Vec::new();
-        let mut partial_tokens = Vec::new();
         let mut signal = None;
 
         if !tokens.is_empty() {
@@ -75,16 +104,10 @@ impl ActiveSequence {
                 for &hash in &global_hashes {
                     unique_blocks.push(UniqueBlock::FullBlock(hash));
                 }
-
-                // Get remaining tokens that don't form a complete block
-                partial_tokens = tokens[complete_blocks_len..].to_vec();
-            } else {
-                // Not enough tokens for a full block, just store them as partial tokens
-                partial_tokens = tokens;
             }
 
             // Add a PartialBlock if there are remaining tokens
-            if !partial_tokens.is_empty() {
+            if tokens.len() % block_size != 0 {
                 unique_blocks.push(UniqueBlock::default()); // Creates a PartialBlock with a new UUID
             }
 
@@ -96,7 +119,7 @@ impl ActiveSequence {
 
         Self {
             unique_blocks,
-            partial_tokens,
+            tokens,
             block_size,
             chunk_size,
             max_output_tokens,
@@ -125,11 +148,12 @@ impl ActiveSequence {
 
     /// Push a token to the sequence
     pub fn push(&mut self, token: u32) -> Option<MoveBlock> {
-        self.partial_tokens.push(token);
+        self.tokens.push(token);
         let mut signal = None;
 
         // Add a partial block if this is the first token in a new partial sequence
-        if self.partial_tokens.len() == 1 {
+        let remainder = self.tokens.len() % self.block_size;
+        if remainder == 1 && self.tokens.len() > 1 {
             // Assert that we need a new partial block (empty or last block is full)
             assert!(
                 self.unique_blocks.is_empty()
@@ -146,16 +170,23 @@ impl ActiveSequence {
             return signal;
         }
 
-        // Not enough tokens for a complete block
-        if self.partial_tokens.len() < self.block_size {
+        // Not enough tokens to complete a block
+        if remainder != 0 {
             return None;
         }
 
-        // At this point we should have exactly one block's worth of tokens
-        assert_eq!(self.partial_tokens.len(), self.block_size);
+        // At this point we have exactly completed a block
+        // Get the latest block's worth of tokens
+        let start_idx = self.tokens.len() - self.block_size;
+        let block_tokens = &self.tokens[start_idx..];
 
         // Compute local block hash for the tokens
-        let local_hash = compute_block_hash_for_seq(&self.partial_tokens, self.block_size);
+        let local_hash = compute_block_hash_for_seq(block_tokens, self.block_size);
+        assert_eq!(
+            local_hash.len(),
+            1,
+            "Expected local_hash to have exactly 1 value"
+        );
 
         // Get the parent hash (the last full block if exists, otherwise None)
         let parent_hash = self
@@ -188,9 +219,6 @@ impl ActiveSequence {
             }
             _ => panic!("Expected last block to be a PartialBlock"),
         }
-
-        // Clear partial tokens since we've consumed them all
-        self.partial_tokens.clear();
 
         signal
     }
@@ -267,6 +295,27 @@ impl ActiveSequence {
 
         signals
     }
+
+    /// Reset the sequence to its initial state and return the reset sequence and signals from freeing current blocks
+    ///
+    /// This function:
+    /// - Creates a new ActiveSequence with the original input tokens
+    /// - Frees all current blocks, generating appropriate signals
+    /// - Returns the new sequence and signals for the KvManager to process
+    pub fn reset_with_signal(&self) -> (Self, Vec<MoveBlock>) {
+        // Create a new sequence with the original input tokens
+        let new_sequence = Self::new(
+            self.tokens[0..self.num_input_tokens].to_vec(),
+            self.max_output_tokens,
+            Some(self.block_size),
+            Some(self.chunk_size),
+        );
+
+        // Free current blocks and collect signals
+        let signals = self.free();
+
+        (new_sequence, signals)
+    }
 }
 
 #[cfg(test)]
@@ -280,6 +329,9 @@ mod tests {
         let (mut seq1, signal1) =
             ActiveSequence::new_with_signal(initial_tokens, 100, Some(16), Some(256));
         assert_eq!(seq1.num_input_tokens, 15);
+
+        // Clone seq1 before making any changes
+        let seq1_clone = seq1.clone();
 
         // Check that we got a Use signal
         assert!(signal1.is_some());
@@ -310,7 +362,8 @@ mod tests {
 
         // Verify state after pushing tokens
         assert_eq!(seq1.unique_blocks.len(), 2); // One full block and one partial block
-        assert_eq!(seq1.partial_tokens.len(), 1);
+        assert_eq!(seq1.tokens.len(), 17);
+        assert_eq!(seq1.tokens.len() % seq1.block_size, 1);
 
         // Create another sequence with block size 16 initialized with tokens [0..17]
         let extended_tokens: Vec<u32> = (0..17).collect();
@@ -360,12 +413,12 @@ mod tests {
             "seq2 should have exactly 2 blocks"
         );
         assert_eq!(
-            seq1.partial_tokens.len(),
+            seq1.tokens.len() % seq1.block_size,
             0,
             "seq1 should have no partial tokens"
         );
         assert_eq!(
-            seq2.partial_tokens.len(),
+            seq2.tokens.len() % seq2.block_size,
             0,
             "seq2 should have no partial tokens"
         );
@@ -390,11 +443,23 @@ mod tests {
             }
             _ => panic!("Expected FullBlock for the second blocks"),
         }
+
+        // Reset seq1 and check that it equals the original clone
+        let (reset_seq, reset_signals) = seq1.reset_with_signal();
+
+        // Verify the reset signals include proper cleanup events
+        assert!(!reset_signals.is_empty());
+
+        // Check that the reset sequence equals the original clone
+        assert_eq!(
+            reset_seq, seq1_clone,
+            "Reset sequence should equal the original clone"
+        );
     }
 
     #[test]
     fn test_active_sequence_generate_signals() {
-        // Create a sequence with block size 16, max_output_tokens 4, initialized with tokens [0..15)
+        // Create a sequence with block size 16, max_output_tokens 4, initialized with tokens [0..14)
         let initial_tokens: Vec<u32> = (0..14).collect();
         let (mut seq, signal) =
             ActiveSequence::new_with_signal(initial_tokens, 4, Some(16), Some(256));
