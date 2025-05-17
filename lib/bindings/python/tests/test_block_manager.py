@@ -191,11 +191,62 @@ async def test_block_list_iteration():
     assert idx == 1.0 + block_count
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA unavailable")
+async def test_block_copy_g1_g2():
+    block_manager = BlockManager(
+        WORKER_ID,
+        NUM_LAYER,
+        PAGE_SIZE,
+        INNER_DIM,
+        DTYPE,
+        HOST_NUM_BLOCKS,
+        DEVICE_NUM_BLOCKS,
+        DEVICE_ID,
+    )
+    # Allocate device (G1) and host (G2) block
+    host_block_list = block_manager.allocate_host_blocks_blocking(1)
+    device_block_list = block_manager.allocate_device_blocks_blocking(1)
+    # Populate host block with unique values
+    host_tensor = torch.from_dlpack(host_block_list[0])
+    for i in range(NUM_LAYER):
+        for j in range(PAGE_SIZE):
+            for k in range(INNER_DIM):
+                host_tensor[0][i][j][k] = i * PAGE_SIZE * INNER_DIM + j * INNER_DIM + k
+    # Copy host block to device block after permuting
+    permute_dims = (0, 2, 3, 1)
+    device_tensor_ = torch.from_dlpack(device_block_list[0]).permute(*permute_dims)
+    device_tensor_.copy_(host_tensor.permute(*permute_dims))
+    # Assert device block is contiguous and updated in block manager
+    device_tensor = torch.from_dlpack(device_block_list[0])
+    for i in range(NUM_LAYER):
+        for j in range(PAGE_SIZE):
+            for k in range(INNER_DIM):
+                assert (
+                    device_tensor[0][i][j][k]
+                    == i * PAGE_SIZE * INNER_DIM + j * INNER_DIM + k
+                )
+    # Set host block to zero and assert updated in block manager
+    host_tensor_ = torch.from_dlpack(host_block_list[0]).permute(*permute_dims)
+    host_tensor_.zero_()
+    assert torch.all(host_tensor == 0)
+    # Copy device block back to host block
+    host_tensor_.copy_(device_tensor_)
+    # Assert host block is updated in block manager
+    for i in range(NUM_LAYER):
+        for j in range(PAGE_SIZE):
+            for k in range(INNER_DIM):
+                assert (
+                    host_tensor[0][i][j][k]
+                    == i * PAGE_SIZE * INNER_DIM + j * INNER_DIM + k
+                )
+
+
 async def main():
     await test_block_manager_initialization()
     await test_cpu_block_access()
     await test_gpu_block_access()
     await test_block_list_iteration()
+    await test_block_copy_g1_g2()
 
 
 if __name__ == "__main__":
