@@ -27,7 +27,7 @@ services:
 
   # Frontend service
   frontend:
-    image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1
+    image: dynamo:latest-trtllm
     container_name: trtllm-frontend
     environment:
       - DYN_ROUTER_MODE=kv
@@ -37,11 +37,10 @@ services:
       - nats-server
       - etcd-server
       - worker-1
-      - worker-2
 
   # TRTLLMWorker replica 1
   worker-1:
-    image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1
+    image: dynamo:latest-trtllm
     container_name: trtllm-worker-1
     working_dir: /workspace/components/backends/trtllm
     command:
