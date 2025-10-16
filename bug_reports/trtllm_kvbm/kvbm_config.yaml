@@ -1,0 +1,19 @@
+backend: pytorch
+# KVBM does not currently support CUDA graphs in TensorRT-LLM
+cuda_graph_config: null
+kv_cache_config:
+  # Disable partial reuse to increase offloading cache hits
+  enable_partial_reuse: false
+  free_gpu_memory_fraction: 0.80
+kv_connector_config:
+  connector_module: dynamo.llm.trtllm_integration.connector
+  connector_scheduler_class: DynamoKVBMConnectorLeader
+  connector_worker_class: DynamoKVBMConnectorWorker
+enable_attention_dp: true
+enable_chunked_prefill: true
+moe_config:
+  backend: TRTLLM
+speculative_config:
+  decoding_type: MTP
+  num_nextn_predict_layers: 3
+

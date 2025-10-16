@@ -1,0 +1,151 @@
+version: '3.8'
+
+services:
+  # NATS - messaging system for KVBM communication
+  nats-server:
+    image: nats:2.11.4
+    container_name: dynamo-nats
+    command: [ "-js", "--trace", "-m", "8222" ]
+    ports:
+      - 4222:4222
+      - 6222:6222
+      - 8222:8222
+    networks:
+      - dynamo-network
+
+  # etcd - distributed key-value store for KVBM coordination
+  etcd-server:
+    image: bitnamilegacy/etcd:3.6.1
+    container_name: dynamo-etcd
+    environment:
+      - ALLOW_NONE_AUTHENTICATION=yes
+    ports:
+      - 2379:2379
+      - 2380:2380
+    networks:
+      - dynamo-network
+
+  # Frontend service
+  frontend:
+    image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1
+    container_name: trtllm-frontend
+    environment:
+      - DYN_ROUTER_MODE=kv
+    networks:
+      - dynamo-network
+    depends_on:
+      - nats-server
+      - etcd-server
+      - worker-1
+      - worker-2
+
+  # TRTLLMWorker replica 1
+  worker-1:
+    image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1
+    container_name: trtllm-worker-1
+    working_dir: /workspace/components/backends/trtllm
+    command:
+      - python3
+      - -m
+      - dynamo.trtllm
+      - --model-path
+      - nvidia/DeepSeek-V3-0324-FP4
+      - --served-model-name
+      - nvidia/DeepSeek-V3-0324-FP4
+      - --extra-engine-args
+      - /etc/trtllm/kvbm_config.yaml
+      - --max-batch-size
+      - "128"
+      - --tensor-parallel-size
+      - "4"
+      - --expert-parallel-size
+      - "4"
+    environment:
+      # HuggingFace token (set in your .env file or replace with actual token)
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN}
+      # KVBM configuration
+      - DYN_KVBM_BARRIER_ID_PREFIX=trtllm-worker-1
+      - DYN_KVBM_CPU_CACHE_GB=128
+      - DYN_KVBM_DISK_CACHE_GB=8
+      - DYN_KVBM_LEADER_WORKER_INIT_TIMEOUT_SECS=1200
+      - DYN_KVBM_METRICS=true
+      # - DYN_KVBM_METRICS_PORT=6880
+      # - DYN_KVBM_DISABLE_DISK_OFFLOAD_FILTER=false
+      - TRTLLM_ENABLE_PDL=1
+      - TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL=True
+    volumes:
+      - models-volume:/root
+      - ./kvbm_config.yaml:/etc/trtllm/kvbm_config.yaml:ro
+    shm_size: 500gb
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 4
+              capabilities: [gpu]
+    networks:
+      - dynamo-network
+    depends_on:
+      - nats-server
+      - etcd-server
+
+  # TRTLLMWorker replica 2
+  worker-2:
+    image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1
+    container_name: trtllm-worker-2
+    working_dir: /workspace/components/backends/trtllm
+    command:
+      - python3
+      - -m
+      - dynamo.trtllm
+      - --model-path
+      - nvidia/DeepSeek-V3-0324-FP4
+      - --served-model-name
+      - nvidia/DeepSeek-V3-0324-FP4
+      - --extra-engine-args
+      - /etc/trtllm/kvbm_config.yaml
+      - --max-batch-size
+      - "128"
+      - --tensor-parallel-size
+      - "4"
+      - --expert-parallel-size
+      - "4"
+    environment:
+      # HuggingFace token (set in your .env file or replace with actual token)
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN}
+      # KVBM configuration
+      - DYN_KVBM_BARRIER_ID_PREFIX=trtllm-worker-2
+      - DYN_KVBM_CPU_CACHE_GB=128
+      - DYN_KVBM_DISK_CACHE_GB=8
+      - DYN_KVBM_LEADER_WORKER_INIT_TIMEOUT_SECS=1200
+      - DYN_KVBM_METRICS=true
+      # - DYN_KVBM_METRICS_PORT=6880
+      # - DYN_KVBM_DISABLE_DISK_OFFLOAD_FILTER=false
+      - TRTLLM_ENABLE_PDL=1
+      - TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL=True
+    volumes:
+      - models-volume:/root
+      - ./kvbm_config.yaml:/etc/trtllm/kvbm_config.yaml:ro
+    shm_size: 500gb
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 4
+              capabilities: [gpu]
+    networks:
+      - dynamo-network
+    depends_on:
+      - nats-server
+      - etcd-server
+
+networks:
+  dynamo-network:
+    driver: bridge
+
+volumes:
+  models-volume:
+    driver: local
+

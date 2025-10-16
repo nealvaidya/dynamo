@@ -1,0 +1,124 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trtllm-deepseek-v3-kvbm-config
+data:
+  kvbm_config.yaml: |
+    backend: pytorch
+    # KVBM does not currently support CUDA graphs in TensorRT-LLM
+    cuda_graph_config: null
+    kv_cache_config:
+      # Disable partial reuse to increase offloading cache hits
+      enable_partial_reuse: false
+      free_gpu_memory_fraction: 0.80
+    kv_connector_config:
+      connector_module: dynamo.llm.trtllm_integration.connector
+      connector_scheduler_class: DynamoKVBMConnectorLeader
+      connector_worker_class: DynamoKVBMConnectorWorker
+    enable_attention_dp: true
+    enable_chunked_prefill: true
+    moe_config:
+      backend: TRTLLM
+    speculative_config:
+      decoding_type: MTP
+      num_nextn_predict_layers: 3
+---
+apiVersion: nvidia.com/v1alpha1
+kind: DynamoGraphDeployment
+metadata:
+  name: trtllm-deepseek-v3-b200-kvbm
+spec:
+  backendFramework: trtllm
+  services:
+    Frontend:
+      annotations:
+        nvidia.com/deployment-strategy: "Recreate"
+      dynamoNamespace: trtllm-deepseek-v3-b200-kvbm
+      componentType: frontend
+      replicas: 1
+      extraPodSpec:
+        mainContainer:
+          image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1
+      envs:
+        - name: DYN_ROUTER_MODE
+          value: kv
+    TRTLLMWorker:
+      annotations:
+        nvidia.com/deployment-strategy: "Recreate"
+      envFromSecret: hf-token-secret
+      dynamoNamespace: trtllm-deepseek-v3-b200-kvbm
+      componentType: worker
+      replicas: 2
+      resources:
+        limits:
+          gpu: "4"
+      sharedMemory:
+        size: 500Gi
+      extraPodSpec:
+        nodeSelector:
+          gpu-type.northflank.com/b200: "true"
+        mainContainer:
+          image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.5.1
+          workingDir: /workspace/components/backends/trtllm
+          command:
+            - python3
+            - -m
+            - dynamo.trtllm
+          args:
+            - --model-path
+            - nvidia/DeepSeek-V3-0324-FP4
+            - --served-model-name
+            - nvidia/DeepSeek-V3-0324-FP4
+            - --extra-engine-args
+            - /etc/trtllm/kvbm_config.yaml
+            - --max-batch-size
+            - "128"
+            - --tensor-parallel-size
+            - "4"
+            - --expert-parallel-size
+            - "4"
+          volumeMounts:
+            - name: models-volume
+              mountPath: /root
+            - name: kvbm-config
+              mountPath: /etc/trtllm/kvbm_config.yaml
+              subPath: kvbm_config.yaml
+        volumes:
+          - name: models-volume
+            persistentVolumeClaim:
+              claimName: vllm-models-pvc
+          - name: kvbm-config
+            configMap:
+              name: trtllm-deepseek-v3-kvbm-config
+      envs:
+        # KVBM requires etcd and nats to be running
+        # Unique barrier ID for each replica (uses pod name)
+        - name: DYN_KVBM_BARRIER_ID_PREFIX
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        # Enable KV offloading to CPU memory (128GB)
+        - name: DYN_KVBM_CPU_CACHE_GB
+          value: "128"
+        # Enable KV offloading to disk (8GB)
+        # Note: Requires CPU memory cache to be enabled first
+        - name: DYN_KVBM_DISK_CACHE_GB
+          value: "8"
+        # Set higher timeout for leader-worker initialization
+        # Memory and disk allocation can take time
+        - name: DYN_KVBM_LEADER_WORKER_INIT_TIMEOUT_SECS
+          value: "1200"
+        # Optional: Enable KVBM metrics (default port: 6880)
+        - name: DYN_KVBM_METRICS
+          value: "true"
+        # Optional: Customize metrics port if needed
+        # - name: DYN_KVBM_METRICS_PORT
+        #   value: "6880"
+        # Optional: Disable disk offload filtering to offload all blocks
+        # Default behavior filters based on frequency to extend SSD lifespan
+        # - name: DYN_KVBM_DISABLE_DISK_OFFLOAD_FILTER
+        #   value: "false"
+        - name: TRTLLM_ENABLE_PDL
+          value: "1"
+        - name: TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL
+          value: "True"
