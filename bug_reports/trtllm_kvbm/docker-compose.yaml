@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # NATS - messaging system for KVBM communication
   nats-server:
@@ -29,8 +27,18 @@ services:
   frontend:
     image: dynamo:latest-trtllm
     container_name: trtllm-frontend
+    command:
+      - python3
+      - -m
+      - dynamo.frontend
+      - --http-port
+      - "8000"
+    ports:
+      - "8000:8000"
     environment:
       - DYN_ROUTER_MODE=kv
+      - NATS_SERVER=nats://nats-server:4222
+      - ETCD_ENDPOINTS=http://etcd-server:2379
     networks:
       - dynamo-network
     depends_on:
@@ -60,6 +68,9 @@ services:
       - --expert-parallel-size
       - "4"
     environment:
+      # Service discovery
+      - NATS_SERVER=nats://nats-server:4222
+      - ETCD_ENDPOINTS=http://etcd-server:2379
       # HuggingFace token (set in your .env file or replace with actual token)
       - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN}
       # KVBM configuration

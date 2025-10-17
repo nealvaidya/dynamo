@@ -84,7 +84,22 @@ docker-compose up -d
 
 View logs:
 ```bash
+# All services
 docker-compose logs -f
+
+# Specific service
+docker-compose logs -f worker-1
+docker-compose logs -f frontend
+```
+
+Check service status:
+```bash
+docker-compose ps
+```
+
+Test the API:
+```bash
+curl http://localhost:8000/v1/models
 ```
 
 Stop all services:
@@ -110,8 +125,13 @@ docker-compose down
 
 ### Frontend
 - Container: `trtllm-frontend`
+- Command: `python3 -m dynamo.frontend --http-port 8000`
 - Router mode: KV
+- Port: 8000 (OpenAI-compatible HTTP API)
 - Depends on: nats-server, etcd-server, worker-1
+- Environment:
+  - `NATS_SERVER=nats://nats-server:4222`
+  - `ETCD_ENDPOINTS=http://etcd-server:2379`
 
 ### Worker-1
 - Container: `trtllm-worker-1`
@@ -132,6 +152,33 @@ docker-compose down
 - Metrics enabled (port 6880)
 - Leader-worker initialization timeout: 1200 seconds
 
+## API Access
+
+Once the services are running, the frontend exposes an OpenAI-compatible API on port 8000:
+
+```bash
+# List available models
+curl http://localhost:8000/v1/models
+
+# Chat completion request
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "nvidia/DeepSeek-V3-0324-FP4",
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "max_tokens": 100
+  }'
+```
+
+## Troubleshooting
+
+If services fail to start:
+
+1. **Check etcd/NATS connectivity**: Ensure `NATS_SERVER` and `ETCD_ENDPOINTS` are correctly set
+2. **Check logs**: `docker-compose logs worker-1` or `docker-compose logs frontend`
+3. **Verify GPU access**: Ensure NVIDIA Container Toolkit is installed and working
+4. **Check shared memory**: Ensure your system has enough memory for the 500GB shm_size
+
 ## Notes
 
 - **Images**: Using locally built `dynamo:latest-trtllm` (not the published x86-64 images)
@@ -139,6 +186,7 @@ docker-compose down
 - **KVBM Infrastructure**: Requires etcd and nats services (included in this compose file)
   - NATS provides messaging between workers and the frontend
   - etcd provides distributed coordination for KVBM operations
+- **Service Discovery**: Workers and frontend discover each other via etcd
 - **GPU Requirements**: Adjust GPU count if you have fewer GPUs available (modify `count` in the deploy section)
 - **Memory**: Shared memory size is set to 500GB; adjust based on your system's available memory
 - **ARM Build Time**: Initial image build can take 30-60 minutes
