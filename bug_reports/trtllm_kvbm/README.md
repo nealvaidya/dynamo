@@ -8,6 +8,7 @@ This directory contains a Docker Compose configuration converted from the Kubern
 - `kvbm_config.yaml` - KVBM configuration file (mounted into containers)
 - `build-image.sh` - Convenience script to build ARM64 images
 - `trtllm_kvbm.yaml` - Original Kubernetes configuration
+- `MPI_FIX.md` - Detailed explanation of MPI configuration for multi-GPU
 
 ## Prerequisites
 
@@ -132,6 +133,8 @@ docker-compose down
 - Environment:
   - `NATS_SERVER=nats://nats-server:4222`
   - `ETCD_ENDPOINTS=http://etcd-server:2379`
+  - `DYN_LOG=debug` - Enable debug-level logging
+  - `DYN_LOGGING_JSONL=false` - Use readable log format
 
 ### Worker-1
 - Container: `trtllm-worker-1`
@@ -144,6 +147,16 @@ docker-compose down
   - Tensor parallel size: 4
   - Expert parallel size: 4
   - Max batch size: 128
+- Environment:
+  - `NATS_SERVER`, `ETCD_ENDPOINTS` - Service discovery
+  - `DYN_LOG=debug` - Enable debug-level logging
+  - `DYN_LOGGING_JSONL=false` - Use readable log format
+  - `NCCL_IB_DISABLE=1` - Disable InfiniBand
+  - `NCCL_P2P_LEVEL=NVL` - Use NVLink for GPU-to-GPU
+- Special configurations for multi-GPU MPI:
+  - `ipc: host` - Required for inter-process communication
+  - `ulimits` - Memory lock, stack size, and file descriptors
+  - `cap_add: SYS_PTRACE` - Required for debugging and MPI
 
 ## KVBM Features Enabled
 
@@ -172,12 +185,55 @@ curl -X POST http://localhost:8000/v1/chat/completions \
 
 ## Troubleshooting
 
-If services fail to start:
+### Worker hangs at "start MpiSession"
+
+If the worker gets stuck at:
+```
+[TRT-LLM] [I] start MpiSession with 4 workers
+```
+
+This is an MPI initialization hang. The docker-compose now includes required MPI configurations:
+- `ipc: host` - Critical for MPI inter-process communication
+- `ulimits` - Proper memory and file descriptor limits
+- `cap_add: SYS_PTRACE` - Required capability for MPI
+- NCCL environment variables for multi-GPU communication
+
+If still hanging, check:
+1. Ensure you're using the updated docker-compose.yaml with these settings
+2. Restart containers: `docker-compose down && docker-compose up -d`
+3. Check GPU connectivity: `nvidia-smi nvlink --status`
+
+### Other Common Issues
 
 1. **Check etcd/NATS connectivity**: Ensure `NATS_SERVER` and `ETCD_ENDPOINTS` are correctly set
 2. **Check logs**: `docker-compose logs worker-1` or `docker-compose logs frontend`
 3. **Verify GPU access**: Ensure NVIDIA Container Toolkit is installed and working
 4. **Check shared memory**: Ensure your system has enough memory for the 500GB shm_size
+
+### Debug Logging
+
+Debug logging is enabled by default with:
+- `DYN_LOG=debug` - Shows detailed debugging information
+- `DYN_LOGGING_JSONL=false` - Uses human-readable log format
+
+To change log levels:
+```yaml
+environment:
+  - DYN_LOG=trace  # Most verbose: trace, debug, info, warn, error
+  - DYN_LOG=info   # Less verbose (default in production)
+```
+
+To enable JSONL structured logging (useful for log aggregation):
+```yaml
+environment:
+  - DYN_LOGGING_JSONL=true
+```
+
+For NCCL-specific debugging:
+```yaml
+environment:
+  - NCCL_DEBUG=INFO  # NCCL communication logs
+```
 
 ## Notes
 

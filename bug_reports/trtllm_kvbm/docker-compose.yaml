@@ -39,6 +39,9 @@ services:
       - DYN_ROUTER_MODE=kv
       - NATS_SERVER=nats://nats-server:4222
       - ETCD_ENDPOINTS=http://etcd-server:2379
+      # Debug logging
+      - DYN_LOG=debug
+      - DYN_LOGGING_JSONL=false
     networks:
       - dynamo-network
     depends_on:
@@ -71,6 +74,9 @@ services:
       # Service discovery
       - NATS_SERVER=nats://nats-server:4222
       - ETCD_ENDPOINTS=http://etcd-server:2379
+      # Debug logging
+      - DYN_LOG=debug
+      - DYN_LOGGING_JSONL=false
       # HuggingFace token (set in your .env file or replace with actual token)
       - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN}
       # KVBM configuration
@@ -83,10 +89,22 @@ services:
       # - DYN_KVBM_DISABLE_DISK_OFFLOAD_FILTER=false
       - TRTLLM_ENABLE_PDL=1
       - TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL=True
+      # NCCL/MPI configuration for multi-GPU in single container
+      - NCCL_IB_DISABLE=1
+      - NCCL_P2P_LEVEL=NVL
     volumes:
       - models-volume:/root
       - ./kvbm_config.yaml:/etc/trtllm/kvbm_config.yaml:ro
     shm_size: 500gb
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
+      nofile:
+        soft: 65536
+        hard: 65536
+    cap_add:
+      - SYS_PTRACE
     deploy:
       resources:
         reservations:
