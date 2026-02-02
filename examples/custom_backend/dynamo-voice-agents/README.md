@@ -17,10 +17,11 @@ limitations under the License.
 
 # Streaming ASR Voice Agents
 
-Real-time speech-to-text transcription using NVIDIA Dynamo distributed runtime with the Parakeet RNNT model.
+Real-time speech-to-text transcription using NVIDIA Dynamo distributed runtime with the Parakeet RNNT model. Supports both file-based transcription and **real-time microphone streaming**.
 
 ## Architecture
 
+### File-Based Transcription
 ```text
 ┌─────────────┐      ┌─────────────────┐      ┌──────────────────┐
 │  ASR Client │ ───▶ │  Audio Chunker  │ ───▶ │  ASR Inference   │
@@ -32,20 +33,145 @@ Real-time speech-to-text transcription using NVIDIA Dynamo distributed runtime w
                           inference               (GPU)
 ```
 
+### Real-Time Microphone Streaming
+```text
+┌─────────────────┐                      ┌─────────────────────────┐
+│   Mic Client    │  ══════════════════▶ │  Streaming ASR Service  │
+│  (local machine)│     audio chunks     │    (GPU server)         │
+│                 │  ◀══════════════════ │  streaming_asr/realtime/│
+└─────────────────┘   transcriptions     │    transcribe_stream    │
+    microphone                           └─────────────────────────┘
+    capture                                    Parakeet RNNT
+                                               real-time inference
+```
+
 ## Components
 
 | Component | File | Description |
 |-----------|------|-------------|
-| **ASR Inference** | `asr_inference.py` | Loads NVIDIA Parakeet RNNT model and performs chunked streaming inference |
-| **Audio Chunker** | `audio_chunker.py` | Entry point that loads audio, computes chunk boundaries, and forwards to inference |
-| **Client** | `asr_client.py` | Test client that sends audio files and prints transcriptions |
+| **ASR Inference** | `asr_inference.py` | Loads NVIDIA Parakeet RNNT model for file-based chunked inference |
+| **Audio Chunker** | `audio_chunker.py` | Loads audio files, computes chunk boundaries, forwards to inference |
+| **Streaming ASR Service** | `streaming_asr_service.py` | Real-time streaming service for microphone input |
+| **File Client** | `asr_client.py` | Test client for file-based transcription |
+| **Mic Client** | `mic_client.py` | Real-time microphone streaming client |
 | **Protocol** | `protocol.py` | Pydantic models for inter-worker communication |
 | **Tracing** | `tracing.py` | OpenTelemetry tracing utilities |
 
 ## Quick Start
 
-### Option 1: Docker (Recommended)
+### Option 1: Real-Time Microphone Streaming (Remote Client)
 
+This is the recommended setup for real-time transcription from your local microphone to a remote GPU server.
+
+#### Step 1: Start the Server (GPU Machine)
+
+**Using Docker (Recommended):**
+```bash
+# Build the image
+docker build -t dynamo-voice-agents .
+
+# Run with remote access enabled (auto-detects server IP)
+docker run --gpus '"device=0"' \
+    -p 2379:2379 \
+    -e ASR_CUDA_DEVICE=0 \
+    -e DYN_STORE_KV=etcd \
+    -e ENABLE_REMOTE_ACCESS=true \
+    dynamo-voice-agents
+
+# Or specify the server IP explicitly
+docker run --gpus '"device=0"' \
+    -p 2379:2379 \
+    -e ASR_CUDA_DEVICE=0 \
+    -e DYN_STORE_KV=etcd \
+    -e DYN_TCP_RPC_HOST=<SERVER_IP> \
+    dynamo-voice-agents
+```
+
+**Using Slurm (NVIDIA DGX/OCI):**
+```bash
+# Launch interactive job with container
+srun -A <account> -p interactive_singlenode -G 4 --time 04:00:00 \
+    --container-mounts /path/to/cache:/root/.cache \
+    --container-image gitlab-master.nvidia.com/fciannella/dynamo-voice-agents/dynamo-voice-agents:latest \
+    --pty bash
+
+# Inside the container, start services with remote access
+export DYN_STORE_KV=etcd
+export DYN_TCP_RPC_HOST=$(hostname -I | awk '{print $1}')  # Auto-detect IP
+bash start_services.sh &
+
+# Note the server IP address for the client
+hostname -I | awk '{print $1}'
+```
+
+**Verify Services Started:**
+```
+============================================
+All services started successfully!
+  - etcd PID: xxxxx
+  - Inference Worker PID: xxxxx
+  - Chunker Worker PID: xxxxx
+  - Streaming Service PID: xxxxx
+============================================
+
+Endpoints available:
+  File-based transcription:
+    - streaming_asr/inference/process
+    - streaming_asr/chunker/transcribe
+  Real-time microphone streaming:
+    - streaming_asr/realtime/transcribe_stream
+```
+
+#### Step 2: Run the Client (Local Machine with Microphone)
+
+**Install Dependencies:**
+```bash
+pip install ai-dynamo sounddevice uvloop
+```
+
+**Run Microphone Client:**
+```bash
+cd examples/custom_backend/dynamo-voice-agents/src
+
+# Set environment to connect to remote server
+export DYN_STORE_KV=etcd
+export ETCD_ENDPOINTS=http://<SERVER_IP>:2379
+export DYN_REQUEST_PLANE=tcp
+
+# Run the microphone client
+python3 mic_client.py
+```
+
+**Expected Output:**
+```
+============================================================
+🎙️  Real-time Streaming ASR Client
+============================================================
+⏳ Waiting for ASR service...
+✅ Connected to ASR service!
+
+📢 Available audio devices:
+  → [15] default (inputs: 32)
+
+🎤 Using default input device: [15] default
+📊 Sample rate: 16000 Hz, Chunk: 500ms
+
+🔴 Recording... Press Ctrl+C to stop.
+
+🎤 Starting streaming session: abc123...
+============================================================
+📝 hello world how are you today
+```
+
+Press `Ctrl+C` to stop recording.
+
+---
+
+### Option 2: File-Based Transcription (Local)
+
+For transcribing audio files without microphone streaming.
+
+**Using Docker:**
 ```bash
 # Build the image
 docker build -t dynamo-voice-agents .
@@ -63,31 +189,32 @@ docker compose up -d
 docker compose logs -f
 ```
 
-### Option 2: Local Development
+### Option 3: Local Development (No Docker)
 
 **Prerequisites:**
 - NVIDIA GPU with CUDA support
 - Python 3.10+
-- NeMo Toolkit installed (`pip install nemo_toolkit[asr]`)
-- Dynamo runtime (`pip install ai-dynamo-runtime`)
+- NeMo Toolkit 2.4 installed (`pip install nemo_toolkit[asr]==2.4.0`)
+- Dynamo runtime (`pip install ai-dynamo`)
+- Audio processing libraries: libsndfile, sox, ffmpeg
 
 **Terminal 1 - Start Inference Worker:**
 ```bash
 cd examples/custom_backend/dynamo-voice-agents/src
 export ASR_CUDA_DEVICE=0  # GPU device to use
-python asr_inference.py
+python3 asr_inference.py
 ```
 
 **Terminal 2 - Start Audio Chunker:**
 ```bash
 cd examples/custom_backend/dynamo-voice-agents/src
-python audio_chunker.py
+python3 audio_chunker.py
 ```
 
 **Terminal 3 - Run Client:**
 ```bash
 cd examples/custom_backend/dynamo-voice-agents/src
-python asr_client.py /path/to/your/audio.wav
+python3 asr_client.py /path/to/your/audio.wav
 ```
 
 ## Configuration
@@ -101,6 +228,9 @@ python asr_client.py /path/to/your/audio.wav
 | `WORKER_LOG_LEVEL` | `INFO` | Logging level |
 | `DYN_STORE_KV` | `file` | Dynamo KV store backend (`file` or `etcd`) |
 | `DYN_REQUEST_PLANE` | `tcp` | Dynamo request plane (`tcp` or `nats`) |
+| `DYN_TCP_RPC_HOST` | `0.0.0.0` | Server IP for remote access (auto-detected if `ENABLE_REMOTE_ACCESS=true`) |
+| `ENABLE_REMOTE_ACCESS` | `false` | Enable remote client access (auto-configures etcd and IP) |
+| `ETCD_ENDPOINTS` | `http://localhost:2379` | etcd endpoint(s) for client connection |
 | `OTEL_EXPORT_ENABLED` | `false` | Enable OpenTelemetry tracing |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | `http://localhost:4317` | OTLP endpoint |
 
@@ -212,3 +342,24 @@ ls -la /app/state/
 ## Architecture Details
 
 See [docs/dynamo-asr-webrtc-architecture.md](docs/dynamo-asr-webrtc-architecture.md) for the complete architecture proposal including WebRTC integration plans.
+
+
+
+## Running on OCI
+
+
+```
+docker build -f Dockerfile -t gitlab-master.nvidia.com/fciannella/dynamo-voice-agents/dynamo-voice-agents:0.0.1 -t gitlab-master.nvidia.com/fciannella/dynamo-voice-agents/dynamo-voice-agents:latest .
+```
+
+```
+docker push gitlab-master.nvidia.com/fciannella/dynamo-voice-agents/dynamo-voice-agents:latest
+
+docker push gitlab-master.nvidia.com/fciannella/dynamo-voice-agents/dynamo-voice-agents:0.0.1
+```
+
+
+```
+srun -A llmservice_nemo_mlops -p interactive_singlenode -G 4 --time 04:00:00 --container-mounts /lustre/fsw/portfolios/llmservice/users/fciannella/cache:/root/.cache,/lustre/fsw/portfolios/llmservice/users/fciannella/src:/root/src --container-image gitlab-master.nvidia.com/fciannella/dynamo-voice-agents/dynamo-voice-agents:0.0.1 --pty bash
+
+```
