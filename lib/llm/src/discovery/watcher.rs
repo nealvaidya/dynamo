@@ -48,6 +48,7 @@ use crate::{
         },
         tensor::{NvCreateTensorRequest, NvCreateTensorResponse},
     },
+    types::generic::realtime::{RealtimeClientEvent, RealtimeServerEvent},
 };
 
 use super::ModelManager;
@@ -1025,6 +1026,15 @@ impl ModelWatcher {
             )
             .await?;
             worker_set.tensor_engine = Some(Arc::new(push_router));
+        } else if card.model_type.supports_realtime() {
+            let realtime_router = PushRouter::<
+                RealtimeClientEvent,
+                Annotated<RealtimeServerEvent>,
+            >::from_client_with_monitor(
+                client, router_config.router_mode, None
+            )
+            .await?;
+            worker_set.realtime_engine = Some(Arc::new(realtime_router));
         } else if card.model_type.supports_prefill() {
             // Case 6: Prefill
             // Guardrail: Verify model_input is Tokens
