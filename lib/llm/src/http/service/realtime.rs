@@ -28,7 +28,7 @@ use axum::{
     routing::get,
 };
 use dynamo_runtime::engine::{AsyncEngine, AsyncEngineContextProvider, RequestStream};
-use dynamo_runtime::pipeline::Context;
+use dynamo_runtime::pipeline::{Context, Error, ManyIn, ManyOut};
 use futures::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
@@ -40,7 +40,17 @@ const REQUEST_CHANNEL_CAPACITY: usize = 64;
 
 use super::{RouteDoc, service_v2};
 use crate::engines::EchoBidirectionalEngine;
-use crate::protocols::openai::chat_completions::NvCreateChatCompletionRequest;
+use crate::protocols::openai::chat_completions::{
+    NvCreateChatCompletionRequest, NvCreateChatCompletionStreamResponse,
+};
+use dynamo_runtime::protocols::annotated::Annotated;
+
+/// Engine contract used by the experimental realtime endpoint.
+pub type BidirectionalEngine = dyn AsyncEngine<
+        ManyIn<NvCreateChatCompletionRequest>,
+        ManyOut<Annotated<NvCreateChatCompletionStreamResponse>>,
+        Error,
+    >;
 
 /// Process-scoped registry for the bidirectional engine. Populated by tests and
 /// (in production) by whatever wires up the experimental endpoint. If unset when
@@ -52,12 +62,24 @@ use crate::protocols::openai::chat_completions::NvCreateChatCompletionRequest;
 /// yet. When that lands, replace this static and the `install_*` helpers below
 /// with `state.manager().get_realtime_engine(model_name)` lookups in `handle_socket`,
 /// and remove the install-time API entirely.
-static BIDIRECTIONAL_ENGINE: OnceLock<EchoBidirectionalEngine> = OnceLock::new();
+static BIDIRECTIONAL_ENGINE: OnceLock<Arc<BidirectionalEngine>> = OnceLock::new();
 
 /// Install the bidirectional engine to be used by `/v1/realtime`. Returns `Err` if an
 /// engine is already installed (the static can only be set once per process).
 /// See [`BIDIRECTIONAL_ENGINE`] for why this install-time API exists.
-pub fn install_engine(engine: EchoBidirectionalEngine) -> Result<(), &'static str> {
+pub fn install_engine<E>(engine: E) -> Result<(), &'static str>
+where
+    E: AsyncEngine<
+            ManyIn<NvCreateChatCompletionRequest>,
+            ManyOut<Annotated<NvCreateChatCompletionStreamResponse>>,
+            Error,
+        > + 'static,
+{
+    install_engine_arc(Arc::new(engine))
+}
+
+/// Install a shared bidirectional engine to be used by `/v1/realtime`.
+pub fn install_engine_arc(engine: Arc<BidirectionalEngine>) -> Result<(), &'static str> {
     BIDIRECTIONAL_ENGINE
         .set(engine)
         .map_err(|_| "realtime bidirectional engine already installed")
@@ -90,7 +112,7 @@ async fn realtime_ws_handler(
 async fn handle_socket(mut socket: WebSocket, _state: Arc<service_v2::State>) {
     // TODO (#9175): read a session-init frame first so we can route /
     // look up the model before forwarding inference frames to the engine.
-    let Some(engine) = BIDIRECTIONAL_ENGINE.get() else {
+    let Some(engine) = BIDIRECTIONAL_ENGINE.get().cloned() else {
         tracing::error!("/v1/realtime connection rejected: bidirectional engine not installed");
         let _ = socket
             .send(close_message(
