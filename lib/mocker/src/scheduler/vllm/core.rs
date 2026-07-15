@@ -485,11 +485,12 @@ impl VllmCore {
             SpeculativeDecodeSampler::new(rates, args.aic_mtp_seed.wrapping_add(worker_id))
         });
         Self {
-            kv_manager: KvManager::new_with_hybrid_cache(
+            kv_manager: KvManager::new_with_eviction_backend_and_hybrid(
                 args.num_gpu_blocks,
                 args.block_size,
                 kv_event_publishers,
                 dp_rank,
+                args.eviction_backend,
                 args.hybrid_mamba_groups,
                 args.hybrid_mamba_states_per_group,
             ),

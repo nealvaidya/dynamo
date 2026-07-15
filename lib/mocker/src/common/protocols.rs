@@ -24,12 +24,28 @@ pub struct G1;
 /// `Lineage` is the default and matches kvbm-logical's own default — it evicts
 /// leaf blocks first, which subsumes the preemption-priority behaviour that the
 /// mocker's old `LRUEvictor::push_front` provided.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
 pub enum MockerEvictionBackend {
     Lru,
     MultiLru,
     #[default]
     Lineage,
+}
+
+impl FromStr for MockerEvictionBackend {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.to_ascii_lowercase().as_str() {
+            "lineage" => Ok(Self::Lineage),
+            "lru" => Ok(Self::Lru),
+            "multi_lru" | "multilru" => Ok(Self::MultiLru),
+            _ => Err(format!(
+                "Invalid eviction_backend: '{value}'. Must be 'lineage', 'lru', or 'multi_lru'."
+            )),
+        }
+    }
 }
 
 /// Trait for publishing KV cache events.
@@ -517,6 +533,7 @@ impl<T> OptionalConfigValue<T> {
 #[serde(default, deny_unknown_fields)]
 struct MockEngineArgsSerde {
     engine_type: OptionalConfigValue<String>,
+    eviction_backend: OptionalConfigValue<String>,
     num_gpu_blocks: OptionalConfigValue<usize>,
     block_size: OptionalConfigValue<usize>,
     max_model_len: OptionalConfigValue<usize>,
@@ -607,6 +624,10 @@ pub struct MockEngineArgs {
     /// Engine type: vLLM, SGLang, or TensorRT-LLM simulation
     #[builder(default = "EngineType::Vllm")]
     pub engine_type: EngineType,
+
+    /// Eviction strategy for inactive vLLM/TRT-LLM KV blocks.
+    #[builder(default)]
+    pub eviction_backend: MockerEvictionBackend,
 
     #[builder(default = "16384")]
     #[validate(range(min = 1))]
@@ -1071,6 +1092,9 @@ impl TryFrom<MockEngineArgsSerde> for MockEngineArgs {
 
         if let Some(engine_type) = compat.engine_type.into_non_null("engine_type")? {
             builder = builder.engine_type(engine_type.parse()?);
+        }
+        if let Some(eviction_backend) = compat.eviction_backend.into_non_null("eviction_backend")? {
+            builder = builder.eviction_backend(eviction_backend.parse()?);
         }
         if let Some(Some(num_gpu_blocks)) = compat.num_gpu_blocks.into_nullable() {
             builder = builder.num_gpu_blocks(num_gpu_blocks);
@@ -1589,6 +1613,23 @@ mod tests {
         assert_eq!(serialized["engine_type"], "vllm");
         assert_eq!(serialized["worker_type"], "aggregated");
         assert_eq!(serialized["preemption_mode"], "lifo");
+    }
+
+    #[test]
+    fn test_mock_engine_args_eviction_backend_json() {
+        let default = MockEngineArgs::from_json_str("{}").unwrap();
+        assert_eq!(default.eviction_backend, MockerEvictionBackend::Lineage);
+
+        let lru = MockEngineArgs::from_json_str(r#"{"eviction_backend":"lru"}"#).unwrap();
+        assert_eq!(lru.eviction_backend, MockerEvictionBackend::Lru);
+        assert_eq!(
+            serde_json::to_value(lru).unwrap()["eviction_backend"],
+            "lru"
+        );
+
+        let invalid = MockEngineArgs::from_json_str(r#"{"eviction_backend":"fifo"}"#)
+            .expect_err("unsupported eviction backend should be rejected");
+        assert!(invalid.to_string().contains("Invalid eviction_backend"));
     }
 
     #[test]

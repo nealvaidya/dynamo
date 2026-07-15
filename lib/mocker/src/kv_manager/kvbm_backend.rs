@@ -428,7 +428,7 @@ impl KvManager {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn new_with_eviction_backend_and_hybrid(
+    pub(crate) fn new_with_eviction_backend_and_hybrid(
         max_capacity: usize,
         block_size: usize,
         kv_event_publishers: KvEventPublishers,
