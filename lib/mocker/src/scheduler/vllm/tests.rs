@@ -79,6 +79,50 @@ fn supports_4096_token_kv_cache_blocks() {
     assert_eq!(core.kv_manager.max_capacity(), 3488);
 }
 
+#[test]
+fn hybrid_mamba_request_lifecycle_drains_without_leaking_active_blocks() {
+    let args = MockEngineArgs::builder()
+        .block_size(4)
+        .num_gpu_blocks(16)
+        .max_num_batched_tokens(Some(16))
+        .max_num_seqs(Some(1))
+        .enable_chunked_prefill(true)
+        .enable_prefix_caching(true)
+        .hybrid_mamba_groups(2)
+        .hybrid_mamba_states_per_group(2)
+        .speedup_ratio(0.0)
+        .build()
+        .unwrap();
+    let mut core = VllmCore::new(args);
+    let uuid = Uuid::from_u128(1);
+    core.receive(DirectRequest {
+        tokens: (0..8).collect(),
+        max_output_tokens: 2,
+        uuid: Some(uuid),
+        dp_rank: 0,
+        ..Default::default()
+    });
+
+    let mut collector = crate::replay::TraceCollector::default();
+    let mut now_ms = 0.0;
+    let mut completed = false;
+    for _ in 0..8 {
+        let pass = core.execute_pass(&mut collector, now_ms);
+        now_ms = pass.end_ms.max(now_ms + 1.0);
+        completed |= pass
+            .output_signals
+            .iter()
+            .any(|signal| signal.uuid == uuid && signal.completed);
+        if completed {
+            break;
+        }
+    }
+
+    assert!(completed);
+    assert!(!core.state.requests.contains_key(&uuid));
+    assert_eq!(core.kv_manager.num_active_blocks(), 0);
+}
+
 fn router_args() -> MockEngineArgs {
     MockEngineArgs::builder()
         .block_size(4)

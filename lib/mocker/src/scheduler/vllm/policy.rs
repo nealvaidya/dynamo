@@ -102,7 +102,11 @@ pub(super) fn decide_waiting_admission<'a>(
             SchedulingPolicy::Vllm => {
                 // Total worker KV remains a fallback one-time admission cap
                 // when max_model_len is unset or larger than the KV pool.
-                if sequence.current_known_blocks() > num_gpu_blocks {
+                if sequence
+                    .current_known_blocks()
+                    .saturating_add(kv_manager.hybrid_steady_blocks_per_request())
+                    > num_gpu_blocks
+                {
                     return AdmissionDecision::Reject;
                 }
             }
@@ -127,7 +131,8 @@ pub(super) fn decide_waiting_admission<'a>(
     let needed = match policy {
         SchedulingPolicy::Vllm => sequence
             .current_known_blocks()
-            .saturating_sub(prefill_cost.active_cached_tokens / block_size),
+            .saturating_sub(prefill_cost.active_cached_tokens / block_size)
+            .saturating_add(kv_manager.hybrid_additional_blocks_needed(sequence)),
         SchedulingPolicy::TrtllmGuaranteedNoEvict => {
             blocks_needed_to_finish(sequence, block_size, kv_manager, Some(&prefill_cost))
         }

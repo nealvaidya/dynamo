@@ -288,6 +288,10 @@ def build_mocker_engine_args(args: argparse.Namespace) -> MockEngineArgs:
             args, "max_num_batched_tokens", _DEFAULT_MAX_NUM_BATCHED_TOKENS
         ),
         enable_prefix_caching=getattr(args, "enable_prefix_caching", True),
+        hybrid_mamba_groups=getattr(args, "hybrid_mamba_groups", 0),
+        hybrid_mamba_states_per_group=getattr(
+            args, "hybrid_mamba_states_per_group", 2
+        ),
         enable_chunked_prefill=getattr(args, "enable_chunked_prefill", True),
         speedup_ratio=getattr(args, "speedup_ratio", 1.0),
         decode_speedup_ratio=getattr(args, "decode_speedup_ratio", 1.0),

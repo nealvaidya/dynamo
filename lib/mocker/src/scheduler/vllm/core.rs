@@ -485,11 +485,13 @@ impl VllmCore {
             SpeculativeDecodeSampler::new(rates, args.aic_mtp_seed.wrapping_add(worker_id))
         });
         Self {
-            kv_manager: KvManager::new_with_event_sink(
+            kv_manager: KvManager::new_with_hybrid_cache(
                 args.num_gpu_blocks,
                 args.block_size,
                 kv_event_publishers,
                 dp_rank,
+                args.hybrid_mamba_groups,
+                args.hybrid_mamba_states_per_group,
             ),
             args,
             dp_rank,
@@ -1577,6 +1579,7 @@ impl VllmCore {
         let capacity_improved = request.sequence.num_allocated_tokens() > 0
             || self.state.running_members.contains(&uuid)
             || self.kv_manager.num_active_blocks() < active_blocks_before;
+        self.kv_manager.release_hybrid_request(uuid);
         for signal in request.sequence.free_signal() {
             assert!(
                 matches!(self.kv_manager.process(&signal), G1Acquire::Ready(_)),
@@ -1626,6 +1629,7 @@ impl VllmCore {
         }
         let preempted = selected.and_then(|uuid| self.state.preempt_uuid(uuid));
         if let Some(preempted) = preempted.as_ref() {
+            self.kv_manager.release_hybrid_request(preempted.uuid);
             self.bump_capacity_generation();
             tracing::debug!(
                 worker_id = self.dp_rank,
@@ -1774,6 +1778,23 @@ impl VllmCore {
         }
 
         loop {
+            if from_waiting && !self.kv_manager.has_hybrid_request(uuid) {
+                let hybrid_reservation = {
+                    let request = self.state.requests.get(&uuid).unwrap_or_else(|| {
+                        panic!("schedule_request: {uuid} removed before hybrid reservation")
+                    });
+                    self.kv_manager
+                        .reserve_hybrid_request(uuid, &request.sequence)
+                };
+                match hybrid_reservation {
+                    G1Acquire::Ready(_) => {}
+                    G1Acquire::CapacityExhausted => return ScheduleOutcome::Blocked,
+                    G1Acquire::BlockedOnOffload { .. } | G1Acquire::RetryNow { .. } => {
+                        panic!("hybrid Mamba accounting does not support KVBM offload")
+                    }
+                }
+            }
+
             let allocation = {
                 let request = self.state.requests.get_mut(&uuid).unwrap_or_else(|| {
                     panic!("schedule_request: {uuid} removed mid-pass (alloc prep)")
@@ -1832,7 +1853,11 @@ impl VllmCore {
                 G1Acquire::RetryNow { .. } => {
                     panic!("process_use must consume its bounded RetryNow internally")
                 }
-                G1Acquire::CapacityExhausted => {}
+                G1Acquire::CapacityExhausted => {
+                    if from_waiting {
+                        self.kv_manager.release_hybrid_request(uuid);
+                    }
+                }
             }
 
             let Some(preempted) = self.policy_preempt() else {
@@ -2039,6 +2064,20 @@ impl VllmCore {
             }
             if !emitted {
                 continue;
+            }
+
+            let first_token = self
+                .state
+                .requests
+                .get(&uuid)
+                .is_some_and(|request| request.sequence.generated_tokens() == 1);
+            if completed {
+                // Release Mamba groups before the terminal full-attention
+                // Deref so their inactive checkpoints enter the shared LRU
+                // first, matching vLLM's hybrid group order.
+                self.kv_manager.release_hybrid_request(uuid);
+            } else if first_token {
+                self.kv_manager.hybrid_on_first_token(uuid);
             }
 
             let handoff_delay_ms = self.state.requests.get(&uuid).and_then(|request| {
@@ -2263,7 +2302,7 @@ impl VllmCore {
                         .process_decode_signal(signal, &mut reservation);
                 }
 
-                let prompt_tokens = {
+                let (prompt_tokens, first_token) = {
                     let request = self
                         .state
                         .requests
@@ -2272,8 +2311,16 @@ impl VllmCore {
                     if !is_complete {
                         request.sequence.commit_allocation(request.sequence.len());
                     }
-                    request.sequence.num_input_tokens()
+                    (
+                        request.sequence.num_input_tokens(),
+                        request.sequence.generated_tokens() == 1,
+                    )
                 };
+                if is_complete {
+                    self.kv_manager.release_hybrid_request(uuid);
+                } else if first_token {
+                    self.kv_manager.hybrid_on_first_token(uuid);
+                }
                 output_signals.push(OutputSignal {
                     uuid,
                     token_id: Some(token_id),

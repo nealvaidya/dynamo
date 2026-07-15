@@ -222,6 +222,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "depends on engine: vLLM 64, SGLang 1, TRTLLM 32.",
     )
     parser.add_argument(
+        "--hybrid-mamba-groups",
+        type=non_negative_int,
+        default=0,
+        help="Opt into vLLM hybrid-cache accounting with this many Mamba groups "
+        "sharing the physical KV pool (default: 0, disabled).",
+    )
+    parser.add_argument(
+        "--hybrid-mamba-states-per-group",
+        type=positive_int,
+        default=2,
+        help="Steady physical Mamba state blocks per active request and group "
+        "when hybrid accounting is enabled (default: 2).",
+    )
+    parser.add_argument(
         "--max-model-len",
         type=positive_int,
         default=None,

@@ -39,6 +39,8 @@ def make_args(**overrides):
         "max_num_seqs": 256,
         "max_num_batched_tokens": 8192,
         "enable_prefix_caching": True,
+        "hybrid_mamba_groups": 0,
+        "hybrid_mamba_states_per_group": 2,
         "enable_chunked_prefill": True,
         "preemption_mode": "lifo",
         "speedup_ratio": 1.0,
@@ -396,6 +398,26 @@ def test_mocker_cli_accepts_mtp_configuration():
     assert args.aic_nextn == 3
     assert args.aic_nextn_accept_rates == "1,0.5"
     assert args.aic_mtp_seed == 99
+
+
+def test_mocker_cli_and_config_accept_hybrid_mamba_configuration():
+    args = parse_args(
+        [
+            "--hybrid-mamba-groups",
+            "4",
+            "--hybrid-mamba-states-per-group",
+            "3",
+        ]
+    )
+    engine_args = CONFIG.build_mocker_engine_args(args)
+
+    assert engine_args.hybrid_mamba_groups == 4
+    assert engine_args.hybrid_mamba_states_per_group == 3
+
+
+def test_mocker_cli_rejects_negative_hybrid_mamba_groups():
+    with pytest.raises(SystemExit):
+        parse_args(["--hybrid-mamba-groups", "-1"])
 
 
 def test_mocker_cli_accepts_max_model_len():

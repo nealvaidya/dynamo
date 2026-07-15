@@ -28,6 +28,10 @@ mod vllm {
         KvManager::new_with_event_sink(capacity, 4, KvEventPublishers::default(), 0)
     }
 
+    fn hybrid_kv_manager(capacity: usize) -> KvManager {
+        KvManager::new_with_hybrid_cache(capacity, 4, KvEventPublishers::default(), 0, 2, 2)
+    }
+
     #[test]
     fn mtp_recomputes_exactly_one_cached_prefix_block() {
         let adjusted = apply_mtp_prefix_recompute(
@@ -133,6 +137,40 @@ mod vllm {
         );
 
         assert!(matches!(decision, AdmissionDecision::Reject));
+    }
+
+    #[test]
+    fn hybrid_mamba_admission_counts_group_state_blocks() {
+        let sequence = ActiveSequence::new((0..8).collect(), 1, Some(4), true, false);
+        let rejected = hybrid_kv_manager(5);
+        let decision = decide_waiting_admission(
+            WaitingAdmissionConfig {
+                policy: SchedulingPolicy::Vllm,
+                num_gpu_blocks: 5,
+                block_size: 4,
+                mtp_enabled: false,
+            },
+            &sequence,
+            true,
+            std::iter::empty(),
+            &rejected,
+        );
+        assert!(matches!(decision, AdmissionDecision::Reject));
+
+        let admitted = hybrid_kv_manager(6);
+        let decision = decide_waiting_admission(
+            WaitingAdmissionConfig {
+                policy: SchedulingPolicy::Vllm,
+                num_gpu_blocks: 6,
+                block_size: 4,
+                mtp_enabled: false,
+            },
+            &sequence,
+            true,
+            std::iter::empty(),
+            &admitted,
+        );
+        assert!(matches!(decision, AdmissionDecision::Admit { .. }));
     }
 
     #[test]

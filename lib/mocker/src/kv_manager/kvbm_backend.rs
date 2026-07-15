@@ -45,7 +45,7 @@ use kvbm_logical::blocks::BlockDuplicationPolicy;
 use kvbm_logical::registry::BlockRegistry;
 use kvbm_logical::tinylfu::TinyLFUTracker;
 use kvbm_logical::{BlockManager, ImmutableBlock, MutableBlock};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use uuid::Uuid;
 
 use crate::common::kv_cache_trace;
@@ -269,6 +269,45 @@ impl ActiveFullBlock {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct HybridSnapshotKey {
+    group: usize,
+    sequence_hash: SequenceHash,
+}
+
+struct ActiveHybridSnapshot {
+    handle: ImmutableBlock<G1>,
+    logical_refs: usize,
+}
+
+impl ActiveHybridSnapshot {
+    fn new(handle: ImmutableBlock<G1>) -> Self {
+        Self {
+            handle,
+            logical_refs: 1,
+        }
+    }
+
+    fn retain(&mut self) {
+        self.logical_refs = self
+            .logical_refs
+            .checked_add(1)
+            .expect("active hybrid snapshot logical reference count overflowed");
+    }
+}
+
+struct HybridRequestAllocation {
+    snapshot_keys: Vec<HybridSnapshotKey>,
+    state_blocks: Vec<MutableBlock<G1>>,
+    released_at_first_token: bool,
+}
+
+enum PreparedHybridSnapshot {
+    Active(HybridSnapshotKey),
+    Matched(HybridSnapshotKey, ImmutableBlock<G1>),
+    Fresh(HybridSnapshotKey),
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum FullBlockCommit {
     Reused,
@@ -293,6 +332,20 @@ pub struct KvManager {
     /// The final logical `Deref` drops the canonical handle and transitions the
     /// block to kvbm-logical's inactive pool.
     active_full: FxHashMap<SequenceHash, ActiveFullBlock>,
+
+    /// Mamba state snapshots occupy the same physical pool as full-attention
+    /// blocks but use a group-qualified identity and never emit router events.
+    active_hybrid_snapshots: FxHashMap<HybridSnapshotKey, ActiveHybridSnapshot>,
+
+    /// Synthetic PLHs for every resident or inactive Mamba snapshot. Entries
+    /// are removed alongside ordinary KVBM evictions.
+    hybrid_registered_snapshots: FxHashMap<PositionalLineageHash, HybridSnapshotKey>,
+
+    /// Request-owned running/speculative Mamba state plus prefill checkpoint
+    /// pins. Mutable state blocks return directly to the reset pool.
+    hybrid_requests: FxHashMap<Uuid, HybridRequestAllocation>,
+    hybrid_mamba_groups: usize,
+    hybrid_mamba_states_per_group: usize,
 
     /// Shadow registry for every block registered in kvbm-logical. The logical
     /// registry is keyed by `PositionalLineageHash`, while the router's radix
@@ -344,7 +397,51 @@ impl KvManager {
         dp_rank: u32,
         eviction_backend: MockerEvictionBackend,
     ) -> Self {
+        Self::new_with_eviction_backend_and_hybrid(
+            max_capacity,
+            block_size,
+            kv_event_publishers,
+            dp_rank,
+            eviction_backend,
+            0,
+            2,
+        )
+    }
+
+    pub fn new_with_hybrid_cache(
+        max_capacity: usize,
+        block_size: usize,
+        kv_event_publishers: KvEventPublishers,
+        dp_rank: u32,
+        hybrid_mamba_groups: usize,
+        hybrid_mamba_states_per_group: usize,
+    ) -> Self {
+        Self::new_with_eviction_backend_and_hybrid(
+            max_capacity,
+            block_size,
+            kv_event_publishers,
+            dp_rank,
+            MockerEvictionBackend::default(),
+            hybrid_mamba_groups,
+            hybrid_mamba_states_per_group,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn new_with_eviction_backend_and_hybrid(
+        max_capacity: usize,
+        block_size: usize,
+        kv_event_publishers: KvEventPublishers,
+        dp_rank: u32,
+        eviction_backend: MockerEvictionBackend,
+        hybrid_mamba_groups: usize,
+        hybrid_mamba_states_per_group: usize,
+    ) -> Self {
         debug_assert!(max_capacity > 0, "max_capacity must be > 0");
+        debug_assert!(
+            hybrid_mamba_groups == 0 || hybrid_mamba_states_per_group > 0,
+            "enabled hybrid cache requires at least one Mamba state block per group"
+        );
 
         let mut registry_builder = BlockRegistry::builder();
         if matches!(eviction_backend, MockerEvictionBackend::MultiLru) {
@@ -389,6 +486,11 @@ impl KvManager {
             next_event_id: 0,
             active_partial: FxHashMap::default(),
             active_full: FxHashMap::default(),
+            active_hybrid_snapshots: FxHashMap::default(),
+            hybrid_registered_snapshots: FxHashMap::default(),
+            hybrid_requests: FxHashMap::default(),
+            hybrid_mamba_groups,
+            hybrid_mamba_states_per_group,
             registered_blocks: FxHashMap::default(),
             #[cfg(feature = "kvbm-offload")]
             offload_engine: None,
@@ -442,6 +544,286 @@ impl KvManager {
             entry.remove();
         } else {
             entry.get_mut().logical_refs -= 1;
+        }
+    }
+
+    fn hybrid_snapshot_plh(key: HybridSnapshotKey) -> PositionalLineageHash {
+        // Normal request PLHs in this workload are at positions below 64. Put
+        // internal group checkpoints in a reserved high-position namespace so
+        // they share KVBM's pool/LRU without colliding with router-visible
+        // full-attention lineage entries.
+        const HYBRID_POSITION_BASE: u64 = 1 << 23;
+        const HYBRID_HASH_TAG: u64 = 0x6d61_6d62_615f_6b76;
+        let group = u64::try_from(key.group).expect("Mamba group id does not fit in u64");
+        let sequence_hash = key.sequence_hash.rotate_left(17)
+            ^ HYBRID_HASH_TAG
+            ^ group.wrapping_mul(0x9e37_79b9_7f4a_7c15);
+        PositionalLineageHash::new(sequence_hash, None, HYBRID_POSITION_BASE + group)
+    }
+
+    fn insert_or_retain_active_hybrid(
+        &mut self,
+        key: HybridSnapshotKey,
+        handle: ImmutableBlock<G1>,
+    ) {
+        match self.active_hybrid_snapshots.entry(key) {
+            Entry::Vacant(entry) => {
+                entry.insert(ActiveHybridSnapshot::new(handle));
+            }
+            Entry::Occupied(mut entry) => {
+                assert_eq!(
+                    entry.get().handle.block_id(),
+                    handle.block_id(),
+                    "hybrid snapshot resolved to a different physical block"
+                );
+                entry.get_mut().retain();
+                drop(handle);
+            }
+        }
+    }
+
+    fn retain_active_hybrid(&mut self, key: HybridSnapshotKey) {
+        self.active_hybrid_snapshots
+            .get_mut(&key)
+            .unwrap_or_else(|| panic!("active hybrid snapshot {key:?} disappeared before commit"))
+            .retain();
+    }
+
+    fn release_active_hybrid(&mut self, key: HybridSnapshotKey) {
+        let Entry::Occupied(mut entry) = self.active_hybrid_snapshots.entry(key) else {
+            panic!("hybrid snapshot {key:?} not in active pool");
+        };
+        assert!(entry.get().logical_refs > 0);
+        if entry.get().logical_refs == 1 {
+            entry.remove();
+        } else {
+            entry.get_mut().logical_refs -= 1;
+        }
+    }
+
+    fn hybrid_snapshot_present(&self, key: HybridSnapshotKey) -> bool {
+        self.active_hybrid_snapshots.contains_key(&key)
+            || self
+                .hybrid_registered_snapshots
+                .contains_key(&Self::hybrid_snapshot_plh(key))
+    }
+
+    fn full_prompt_sequence_hash(
+        &self,
+        sequence: &ActiveSequence,
+        one_based_block_count: usize,
+    ) -> Option<SequenceHash> {
+        if one_based_block_count == 0 {
+            return None;
+        }
+        sequence
+            .unique_blocks()
+            .get(one_based_block_count - 1)
+            .and_then(|block| match block {
+                UniqueBlock::FullBlock(sequence_hash) => Some(*sequence_hash),
+                UniqueBlock::PartialBlock(_) => None,
+            })
+    }
+
+    fn hybrid_snapshot_keys_for_request(
+        &self,
+        sequence: &ActiveSequence,
+    ) -> (Vec<HybridSnapshotKey>, usize) {
+        if self.hybrid_mamba_groups == 0 {
+            return (Vec::new(), 0);
+        }
+
+        let cached_blocks = self.get_prefill_cost(sequence).cached_tokens / self.block_size;
+        let full_prompt_blocks =
+            (sequence.num_input_tokens() / self.block_size).min(sequence.unique_blocks().len());
+        let input_hash = self.full_prompt_sequence_hash(sequence, cached_blocks);
+        let final_hash = self.full_prompt_sequence_hash(sequence, full_prompt_blocks);
+
+        let mut seen = FxHashSet::default();
+        let mut keys = Vec::with_capacity(self.hybrid_mamba_groups * 2);
+        for sequence_hash in input_hash.into_iter().chain(final_hash) {
+            for group in 0..self.hybrid_mamba_groups {
+                let key = HybridSnapshotKey {
+                    group,
+                    sequence_hash,
+                };
+                if seen.insert(key) {
+                    keys.push(key);
+                }
+            }
+        }
+
+        // The terminal snapshot is one of the steady align-mode states. If a
+        // prompt has no complete block there is no snapshot, so all steady
+        // states are anonymous request-owned blocks.
+        let anonymous_states = if final_hash.is_some() {
+            self.hybrid_mamba_groups * self.hybrid_mamba_states_per_group.saturating_sub(1)
+        } else {
+            self.hybrid_mamba_groups * self.hybrid_mamba_states_per_group
+        };
+        (keys, anonymous_states)
+    }
+
+    pub(crate) fn hybrid_additional_blocks_needed(&self, sequence: &ActiveSequence) -> usize {
+        let (keys, anonymous_states) = self.hybrid_snapshot_keys_for_request(sequence);
+        anonymous_states
+            + keys
+                .into_iter()
+                .filter(|key| !self.active_hybrid_snapshots.contains_key(key))
+                .count()
+    }
+
+    pub(crate) fn hybrid_steady_blocks_per_request(&self) -> usize {
+        self.hybrid_mamba_groups * self.hybrid_mamba_states_per_group
+    }
+
+    pub(crate) fn has_hybrid_request(&self, uuid: Uuid) -> bool {
+        self.hybrid_requests.contains_key(&uuid)
+    }
+
+    pub(crate) fn reserve_hybrid_request(
+        &mut self,
+        uuid: Uuid,
+        sequence: &ActiveSequence,
+    ) -> G1Acquire<usize> {
+        if self.hybrid_mamba_groups == 0 || self.hybrid_requests.contains_key(&uuid) {
+            return G1Acquire::Ready(0);
+        }
+
+        let (snapshot_keys, anonymous_states) = self.hybrid_snapshot_keys_for_request(sequence);
+        let mut prepared = Vec::with_capacity(snapshot_keys.len());
+        let mut fresh_snapshots = 0usize;
+        for key in snapshot_keys.iter().copied() {
+            if self.active_hybrid_snapshots.contains_key(&key) {
+                prepared.push(PreparedHybridSnapshot::Active(key));
+                continue;
+            }
+            let plh = Self::hybrid_snapshot_plh(key);
+            if let Some(handle) = self.block_manager.match_blocks(&[plh]).into_iter().next() {
+                prepared.push(PreparedHybridSnapshot::Matched(key, handle));
+            } else {
+                fresh_snapshots += 1;
+                prepared.push(PreparedHybridSnapshot::Fresh(key));
+            }
+        }
+
+        let requested = fresh_snapshots + anonymous_states;
+        let blocks = match self.allocate_use_slots(requested, None) {
+            G1Acquire::Ready(blocks) => blocks,
+            G1Acquire::CapacityExhausted => return G1Acquire::CapacityExhausted,
+            G1Acquire::BlockedOnOffload {
+                offload_id,
+                deadline_ms,
+            } => {
+                return G1Acquire::BlockedOnOffload {
+                    offload_id,
+                    deadline_ms,
+                };
+            }
+            G1Acquire::RetryNow { .. } => {
+                panic!("hybrid allocation must consume RetryNow internally")
+            }
+        };
+        let mut blocks = blocks.into_iter();
+
+        for snapshot in prepared {
+            match snapshot {
+                PreparedHybridSnapshot::Active(key) => self.retain_active_hybrid(key),
+                PreparedHybridSnapshot::Matched(key, handle) => {
+                    self.insert_or_retain_active_hybrid(key, handle);
+                }
+                PreparedHybridSnapshot::Fresh(key) => {
+                    let mutable = blocks
+                        .next()
+                        .expect("fresh hybrid snapshot reservation disappeared");
+                    let candidate_id = mutable.block_id();
+                    let plh = Self::hybrid_snapshot_plh(key);
+                    let complete = mutable
+                        .stage(plh, self.block_size)
+                        .expect("hybrid snapshot stage failed");
+                    let handle = self.block_manager.register_block(complete);
+                    assert_eq!(
+                        handle.block_id(),
+                        candidate_id,
+                        "fresh hybrid snapshot unexpectedly deduplicated"
+                    );
+                    assert!(self.hybrid_registered_snapshots.insert(plh, key).is_none());
+                    self.insert_or_retain_active_hybrid(key, handle);
+                }
+            }
+        }
+
+        let state_blocks = blocks.collect::<Vec<_>>();
+        assert_eq!(
+            state_blocks.len(),
+            anonymous_states,
+            "hybrid state reservation returned the wrong number of blocks"
+        );
+        assert!(
+            self.hybrid_requests
+                .insert(
+                    uuid,
+                    HybridRequestAllocation {
+                        snapshot_keys,
+                        state_blocks,
+                        released_at_first_token: false,
+                    },
+                )
+                .is_none()
+        );
+        G1Acquire::Ready(requested)
+    }
+
+    pub(crate) fn hybrid_on_first_token(&mut self, uuid: Uuid) {
+        let Some(mut allocation) = self.hybrid_requests.remove(&uuid) else {
+            return;
+        };
+        if allocation.released_at_first_token {
+            self.hybrid_requests.insert(uuid, allocation);
+            return;
+        }
+
+        let available_before = self.block_manager.available_blocks();
+        for key in allocation.snapshot_keys.drain(..) {
+            self.release_active_hybrid(key);
+        }
+        let steady_blocks = self.hybrid_steady_blocks_per_request();
+        let additional = steady_blocks.saturating_sub(allocation.state_blocks.len());
+        match self.allocate_use_slots(additional, None) {
+            G1Acquire::Ready(blocks) => allocation.state_blocks.extend(blocks),
+            G1Acquire::CapacityExhausted
+            | G1Acquire::BlockedOnOffload { .. }
+            | G1Acquire::RetryNow { .. } => {
+                panic!("released Mamba checkpoints must fund the steady decode state")
+            }
+        }
+        allocation.released_at_first_token = true;
+        self.hybrid_requests.insert(uuid, allocation);
+
+        let released = self
+            .block_manager
+            .available_blocks()
+            .saturating_sub(available_before);
+        if released > 0 {
+            self.bump_capacity_generation(released);
+        }
+    }
+
+    pub(crate) fn release_hybrid_request(&mut self, uuid: Uuid) {
+        let Some(mut allocation) = self.hybrid_requests.remove(&uuid) else {
+            return;
+        };
+        let available_before = self.block_manager.available_blocks();
+        for key in allocation.snapshot_keys.drain(..) {
+            self.release_active_hybrid(key);
+        }
+        drop(allocation);
+        let released = self
+            .block_manager
+            .available_blocks()
+            .saturating_sub(available_before);
+        if released > 0 {
+            self.bump_capacity_generation(released);
         }
     }
 
@@ -1943,6 +2325,9 @@ impl KvManager {
         let mut offload_blocks = Vec::with_capacity(evicted_plhs.len());
 
         for plh in evicted_plhs {
+            if self.hybrid_registered_snapshots.remove(&plh).is_some() {
+                continue;
+            }
             let Some(info) = self.registered_blocks.remove(&plh) else {
                 continue;
             };
@@ -2138,34 +2523,57 @@ impl KvManager {
         // consistent with that no-reuse contract.
         // overlap = all reusable prefix blocks (compute); active_overlap = only
         // those backed by an active block (capacity — inactive reuse is re-consumed).
-        let (overlap_blocks, active_overlap_blocks) = if sequence.enable_prefix_caching() {
-            let plhs = sequence.positional_lineage_hashes();
-            let mut overlap = 0;
-            let mut active_overlap = 0;
-            for (i, block) in seq_blocks.iter().enumerate() {
-                match block {
-                    UniqueBlock::FullBlock(seq_hash) => {
-                        if self.active_full.contains_key(seq_hash) {
-                            overlap += 1;
-                            active_overlap += 1;
-                            continue;
+        let (full_attention_overlap, full_attention_active_overlap) =
+            if sequence.enable_prefix_caching() {
+                let plhs = sequence.positional_lineage_hashes();
+                let mut overlap = 0;
+                let mut active_overlap = 0;
+                for (i, block) in seq_blocks.iter().enumerate() {
+                    match block {
+                        UniqueBlock::FullBlock(seq_hash) => {
+                            if self.active_full.contains_key(seq_hash) {
+                                overlap += 1;
+                                active_overlap += 1;
+                                continue;
+                            }
+                            let Some(plh) = plhs.get(i) else {
+                                break;
+                            };
+                            if self.registered_blocks.contains_key(plh) {
+                                overlap += 1;
+                            } else {
+                                break;
+                            }
                         }
-                        let Some(plh) = plhs.get(i) else {
-                            break;
-                        };
-                        if self.registered_blocks.contains_key(plh) {
-                            overlap += 1;
-                        } else {
-                            break;
-                        }
+                        UniqueBlock::PartialBlock(_) => break,
                     }
-                    UniqueBlock::PartialBlock(_) => break,
                 }
-            }
-            (overlap, active_overlap)
+                (overlap, active_overlap)
+            } else {
+                (0, 0)
+            };
+
+        let overlap_blocks = if self.hybrid_mamba_groups == 0 {
+            full_attention_overlap
         } else {
-            (0, 0)
+            (1..=full_attention_overlap)
+                .rev()
+                .find(|block_count| {
+                    let Some(sequence_hash) =
+                        self.full_prompt_sequence_hash(sequence, *block_count)
+                    else {
+                        return false;
+                    };
+                    (0..self.hybrid_mamba_groups).all(|group| {
+                        self.hybrid_snapshot_present(HybridSnapshotKey {
+                            group,
+                            sequence_hash,
+                        })
+                    })
+                })
+                .unwrap_or(0)
         };
+        let active_overlap_blocks = full_attention_active_overlap.min(overlap_blocks);
 
         let new_blocks = seq_blocks.len() - overlap_blocks;
         let cached_tokens = (overlap_blocks * self.block_size).min(sequence.num_input_tokens());
@@ -2215,6 +2623,22 @@ mod tests {
 
     fn make_mgr(capacity: usize, block_size: usize) -> KvManager {
         KvManager::new_with_event_sink(capacity, block_size, KvEventPublishers::default(), 0)
+    }
+
+    fn make_hybrid_mgr(
+        capacity: usize,
+        block_size: usize,
+        groups: usize,
+        states_per_group: usize,
+    ) -> KvManager {
+        KvManager::new_with_hybrid_cache(
+            capacity,
+            block_size,
+            KvEventPublishers::default(),
+            0,
+            groups,
+            states_per_group,
+        )
     }
 
     fn expect_ready<T>(outcome: G1Acquire<T>) -> T {
@@ -2289,6 +2713,42 @@ mod tests {
 
     fn plh(v: u64) -> PositionalLineageHash {
         PositionalLineageHash::new(v, None, 0)
+    }
+
+    #[test]
+    fn hybrid_mamba_snapshots_gate_reuse_and_share_g1_capacity() {
+        let uuid = Uuid::from_u128(1);
+        let mut manager = make_hybrid_mgr(32, 4, 2, 2);
+        let (sequence, creation) =
+            ActiveSequence::new_with_signal((0..8).collect(), 1, Some(4), true);
+
+        assert_eq!(manager.get_prefill_cost(&sequence).cached_tokens, 0);
+        assert_eq!(manager.hybrid_additional_blocks_needed(&sequence), 4);
+        assert_eq!(
+            expect_ready(manager.reserve_hybrid_request(uuid, &sequence)),
+            4
+        );
+        assert_eq!(manager.num_active_blocks(), 4);
+
+        assert_eq!(expect_ready(manager.process(&creation.unwrap())), 2);
+        assert_eq!(manager.num_active_blocks(), 6);
+
+        manager.hybrid_on_first_token(uuid);
+        assert_eq!(manager.num_active_blocks(), 6);
+        assert_eq!(manager.num_inactive_blocks(), 2);
+
+        for signal in sequence.free_signal() {
+            expect_ready(manager.process(&signal));
+        }
+        assert_eq!(manager.num_active_blocks(), 4);
+        manager.release_hybrid_request(uuid);
+        assert_eq!(manager.num_active_blocks(), 0);
+
+        let repeated = ActiveSequence::new((0..8).collect(), 1, Some(4), true, false);
+        let cost = manager.get_prefill_cost(&repeated);
+        assert_eq!(cost.cached_tokens, 8);
+        assert_eq!(cost.new_tokens, 0);
+        assert_eq!(manager.hybrid_additional_blocks_needed(&repeated), 4);
     }
 
     fn lineage_plh(id: u64) -> PositionalLineageHash {

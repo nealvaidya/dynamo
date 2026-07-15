@@ -523,6 +523,8 @@ struct MockEngineArgsSerde {
     max_num_seqs: OptionalConfigValue<usize>,
     max_num_batched_tokens: OptionalConfigValue<usize>,
     enable_prefix_caching: OptionalConfigValue<bool>,
+    hybrid_mamba_groups: OptionalConfigValue<usize>,
+    hybrid_mamba_states_per_group: OptionalConfigValue<usize>,
     enable_chunked_prefill: OptionalConfigValue<bool>,
     speedup_ratio: OptionalConfigValue<f64>,
     decode_speedup_ratio: OptionalConfigValue<f64>,
@@ -631,6 +633,17 @@ pub struct MockEngineArgs {
 
     #[builder(default = true)]
     pub enable_prefix_caching: bool,
+
+    /// Number of Mamba cache groups sharing the physical vLLM KV pool.
+    /// Zero preserves the scalar full-attention cache model.
+    #[builder(default = "0")]
+    pub hybrid_mamba_groups: usize,
+
+    /// Steady-state physical Mamba blocks held per active request and group.
+    /// `mamba-cache-mode=align` with one speculative token uses two.
+    #[builder(default = "2")]
+    #[validate(range(min = 1))]
+    pub hybrid_mamba_states_per_group: usize,
 
     #[builder(default = true)]
     pub enable_chunked_prefill: bool,
@@ -935,6 +948,39 @@ fn validate_mock_engine_args(args: &MockEngineArgs) -> Result<(), ValidationErro
         ));
     }
 
+    if args.hybrid_mamba_groups > 0 {
+        if args.engine_type != EngineType::Vllm {
+            return Err(mock_engine_args_validation_error(
+                "hybrid_mamba_requires_vllm",
+                format!(
+                    "hybrid_mamba_groups is supported only for engine_type=vllm, got engine_type={:?}",
+                    args.engine_type
+                ),
+            ));
+        }
+        if args.worker_type != WorkerType::Aggregated {
+            return Err(mock_engine_args_validation_error(
+                "hybrid_mamba_requires_aggregated",
+                format!(
+                    "hybrid_mamba_groups currently requires worker_type=aggregated, got worker_type={:?}",
+                    args.worker_type
+                ),
+            ));
+        }
+        if !args.enable_prefix_caching {
+            return Err(mock_engine_args_validation_error(
+                "hybrid_mamba_requires_prefix_caching",
+                "hybrid_mamba_groups requires enable_prefix_caching=true".to_string(),
+            ));
+        }
+        if args.num_g2_blocks.is_some() || args.num_g3_blocks.is_some() || args.enable_g4_storage {
+            return Err(mock_engine_args_validation_error(
+                "hybrid_mamba_offload_unsupported",
+                "hybrid_mamba_groups does not yet support KVBM offload tiers".to_string(),
+            ));
+        }
+    }
+
     if args.max_model_len.is_some() && args.engine_type != EngineType::Vllm {
         return Err(mock_engine_args_validation_error(
             "max_model_len_requires_vllm",
@@ -1046,6 +1092,18 @@ impl TryFrom<MockEngineArgsSerde> for MockEngineArgs {
             .into_non_null("enable_prefix_caching")?
         {
             builder = builder.enable_prefix_caching(enable_prefix_caching);
+        }
+        if let Some(hybrid_mamba_groups) = compat
+            .hybrid_mamba_groups
+            .into_non_null("hybrid_mamba_groups")?
+        {
+            builder = builder.hybrid_mamba_groups(hybrid_mamba_groups);
+        }
+        if let Some(hybrid_mamba_states_per_group) = compat
+            .hybrid_mamba_states_per_group
+            .into_non_null("hybrid_mamba_states_per_group")?
+        {
+            builder = builder.hybrid_mamba_states_per_group(hybrid_mamba_states_per_group);
         }
         if let Some(enable_chunked_prefill) = compat
             .enable_chunked_prefill
@@ -1751,6 +1809,73 @@ mod tests {
             Some("0.85,0.3,0")
         );
         assert_eq!(round_trip.aic_mtp_seed, 42);
+    }
+
+    #[test]
+    fn test_hybrid_mamba_defaults_and_json_round_trip() {
+        let defaults = MockEngineArgs::builder()
+            .build()
+            .unwrap()
+            .normalized()
+            .unwrap();
+        assert_eq!(defaults.hybrid_mamba_groups, 0);
+        assert_eq!(defaults.hybrid_mamba_states_per_group, 2);
+
+        let args = MockEngineArgs::builder()
+            .hybrid_mamba_groups(4)
+            .hybrid_mamba_states_per_group(3)
+            .build()
+            .unwrap()
+            .normalized()
+            .unwrap();
+        let json = serde_json::to_string(&args).unwrap();
+        let round_trip = MockEngineArgs::from_json_str(&json).unwrap();
+        assert_eq!(round_trip.hybrid_mamba_groups, 4);
+        assert_eq!(round_trip.hybrid_mamba_states_per_group, 3);
+    }
+
+    #[test]
+    fn test_hybrid_mamba_validation() {
+        let unsupported = [
+            MockEngineArgs::builder()
+                .engine_type(EngineType::Sglang)
+                .hybrid_mamba_groups(4)
+                .build()
+                .unwrap(),
+            MockEngineArgs::builder()
+                .worker_type(WorkerType::Prefill)
+                .hybrid_mamba_groups(4)
+                .build()
+                .unwrap(),
+            MockEngineArgs::builder()
+                .enable_prefix_caching(false)
+                .hybrid_mamba_groups(4)
+                .build()
+                .unwrap(),
+            MockEngineArgs::builder()
+                .num_g2_blocks(Some(8))
+                .hybrid_mamba_groups(4)
+                .build()
+                .unwrap(),
+        ];
+
+        for args in unsupported {
+            let error = args.normalized().unwrap_err();
+            assert!(
+                error.to_string().contains("hybrid_mamba"),
+                "unexpected validation error: {error}"
+            );
+        }
+
+        assert!(
+            MockEngineArgs::builder()
+                .hybrid_mamba_groups(4)
+                .hybrid_mamba_states_per_group(0)
+                .build()
+                .unwrap()
+                .normalized()
+                .is_err()
+        );
     }
 
     #[test]
