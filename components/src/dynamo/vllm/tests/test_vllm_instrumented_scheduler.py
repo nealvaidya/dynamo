@@ -3604,6 +3604,8 @@ def test_resident_measurement_partial_mismatch_aborts_before_dispatch(monkeypatc
         point_type="decode", benchmark_id=8, total_kv_read_tokens=128, batch_size=2
     )
     stub = InstrumentedScheduler.__new__(InstrumentedScheduler)
+    stub._bench_active = True
+    stub._bench_phase = _BenchPhase.DECODE_SWEEP
     stub._bench_current_point = point
     stub._bench_decode_stage = _DecodeStage.RESIDENT
     stub._bench_abort = MagicMock()
@@ -3615,6 +3617,28 @@ def test_resident_measurement_partial_mismatch_aborts_before_dispatch(monkeypatc
     )
 
     with pytest.raises(RuntimeError, match="scheduled 1 of 2 requests") as exc_info:
-        InstrumentedScheduler._bench_measure_resident_batch(stub)
+        InstrumentedScheduler.schedule(stub)
 
     stub._bench_abort.assert_called_once_with(exc_info.value)
+
+
+def test_resident_parent_schedule_failure_aborts_benchmark(monkeypatch):
+    error = RuntimeError("parent scheduling failed")
+    stub = InstrumentedScheduler.__new__(InstrumentedScheduler)
+    stub._bench_active = True
+    stub._bench_phase = _BenchPhase.DECODE_SWEEP
+    stub._bench_current_point = BenchmarkPoint(
+        point_type="decode", benchmark_id=9, total_kv_read_tokens=128, batch_size=2
+    )
+    stub._bench_decode_stage = _DecodeStage.RESIDENT
+    stub._bench_abort = MagicMock()
+    monkeypatch.setattr(
+        instrumented_scheduler_module.AsyncScheduler,
+        "schedule",
+        MagicMock(side_effect=error),
+    )
+
+    with pytest.raises(RuntimeError, match="parent scheduling failed"):
+        InstrumentedScheduler.schedule(stub)
+
+    stub._bench_abort.assert_called_once_with(error)

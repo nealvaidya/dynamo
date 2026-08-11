@@ -1537,9 +1537,9 @@ class InstrumentedScheduler(AsyncScheduler):
 
     def schedule(self, throttle_prefills: bool = False) -> SchedulerOutput:
         if self._bench_active and self._bench_phase != _BenchPhase.IDLE:
-            if self._bench_decode_stage is _DecodeStage.RESIDENT:
-                return self._bench_measure_resident_batch()
             try:
+                if self._bench_decode_stage is _DecodeStage.RESIDENT:
+                    return self._bench_measure_resident_batch()
                 output = self._bench_step()
             except Exception as error:
                 point = self._bench_current_point
@@ -3702,17 +3702,10 @@ class InstrumentedScheduler(AsyncScheduler):
         if point is None or output.total_num_scheduled_tokens != point.batch_size:
             expected_tokens = point.batch_size if point is not None else 0
             if output.total_num_scheduled_tokens > 0:
-                error = RuntimeError(
+                raise RuntimeError(
                     "resident benchmark decode scheduled "
                     f"{output.total_num_scheduled_tokens} of {expected_tokens} requests"
                 )
-                logger.error(
-                    "Aborting benchmark before dispatching a partial resident "
-                    "decode batch: %s",
-                    point,
-                )
-                self._bench_abort(error)
-                raise error
             logger.warning(
                 "Skipping benchmark decode point after the resident batch "
                 "scheduled %d of %d requests: %s",
@@ -3728,15 +3721,7 @@ class InstrumentedScheduler(AsyncScheduler):
             return output
 
         self._bench_sync_pending = True
-        try:
-            self._bench_synchronize_output(output)
-        except Exception as error:
-            logger.exception(
-                "Benchmark synchronization failed (benchmark_id=%s)",
-                point.benchmark_id,
-            )
-            self._bench_abort(error)
-            raise
+        self._bench_synchronize_output(output)
         self._schedule_times.append(time.monotonic())
         return output
 
