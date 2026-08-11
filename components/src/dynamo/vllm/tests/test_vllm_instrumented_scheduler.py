@@ -3239,8 +3239,7 @@ def test_prefill_point_with_exact_batch_shape_is_saved():
     ]
 
 
-@pytest.mark.parametrize("fpm_count", [0, 2])
-def test_benchmark_point_rejects_non_single_fpm_count(fpm_count):
+def test_benchmark_point_rejects_multiple_fpms():
     point = BenchmarkPoint(
         point_type="decode",
         benchmark_id=4,
@@ -3253,10 +3252,51 @@ def test_benchmark_point_rejects_non_single_fpm_count(fpm_count):
             "sum_decode_kv_tokens": 48,
         }
     }
-    stub = _benchmark_save_stub(point, [fpm.copy() for _ in range(fpm_count)])
+    stub = _benchmark_save_stub(point, [fpm.copy(), fpm.copy()])
 
     with pytest.raises(RuntimeError, match="exactly one FPM"):
         InstrumentedScheduler._bench_save_current_point(stub)
+
+
+def test_decode_timeout_group_skip_collects_all_ranks():
+    point = BenchmarkPoint(
+        point_type="decode",
+        benchmark_id=4,
+        total_kv_read_tokens=48,
+        batch_size=3,
+    )
+    rank1_fpm = {
+        "counter_id": point.benchmark_id,
+        "dp_rank": 1,
+        "wall_time": 0.01,
+        "scheduled_requests": {
+            "num_decode_requests": point.batch_size,
+            "sum_decode_kv_tokens": point.total_kv_read_tokens,
+        },
+    }
+    stub = _benchmark_save_stub(point, [])
+    stub._bench_dp_size = 2
+    stub._bench_deadline_monotonic = None
+    stub._bench_synchronizer = MagicMock()
+    stub._bench_synchronizer.collect_result.return_value = (
+        instrumented_scheduler_module._BenchmarkGroupResult(
+            rank_results=[
+                {"dp_rank": 0, "fpms": []},
+                {"dp_rank": 1, "fpms": [rank1_fpm]},
+            ],
+            stop_requested=False,
+        )
+    )
+
+    InstrumentedScheduler._bench_save_current_point(stub)
+
+    stub._bench_synchronizer.collect_result.assert_called_once_with(
+        point, [], stop_deadline_monotonic=None
+    )
+    assert stub._bench_results == []
+    assert stub._bench_skipped_points == [
+        SkippedBenchmarkPoint(point=point, reason="decode_measurement_timeout")
+    ]
 
 
 def test_decode_point_with_no_fpm_stops_waiting_at_deadline(monkeypatch):
@@ -3272,7 +3312,6 @@ def test_decode_point_with_no_fpm_stops_waiting_at_deadline(monkeypatch):
     stub._bench_current_point = point
     stub._bench_current_fpms = []
     stub._bench_point_deadline = 1.0
-    stub._bench_skipped_points = []
     stub._bench_save_current_point = MagicMock()
     stub._bench_cleanup_requests = MagicMock()
     stub._bench_transition_to_timeout_done = MagicMock(return_value=False)
@@ -3280,14 +3319,9 @@ def test_decode_point_with_no_fpm_stops_waiting_at_deadline(monkeypatch):
 
     assert InstrumentedScheduler._bench_step_decode(stub) is None
 
-    stub._bench_save_current_point.assert_not_called()
+    stub._bench_save_current_point.assert_called_once_with()
     stub._bench_cleanup_requests.assert_called_once_with()
-    assert stub._bench_current_point is None
-    assert stub._bench_point_deadline == 0.0
     assert stub._bench_drain_pending is True
-    assert stub._bench_skipped_points == [
-        SkippedBenchmarkPoint(point=point, reason="decode_measurement_timeout")
-    ]
 
 
 def test_prefill_point_with_measured_batch_size_mismatch_is_skipped():
@@ -3631,7 +3665,35 @@ def test_resident_empty_mismatch_aborts_attention_dp_peers(monkeypatch):
     stub._bench_abort.assert_called_once_with(exc_info.value)
 
 
-def test_resident_measurement_partial_mismatch_aborts_before_dispatch(monkeypatch):
+def test_resident_partial_mismatch_completes_before_single_rank_skip(monkeypatch):
+    point = BenchmarkPoint(
+        point_type="decode", benchmark_id=8, total_kv_read_tokens=128, batch_size=2
+    )
+    stub = InstrumentedScheduler.__new__(InstrumentedScheduler)
+    stub._bench_current_point = point
+    stub._bench_decode_stage = _DecodeStage.RESIDENT
+    stub._bench_synchronizer = None
+    stub._schedule_times = deque()
+    stub._bench_cleanup_requests = MagicMock()
+    output = SimpleNamespace(total_num_scheduled_tokens=1)
+    monkeypatch.setattr(
+        instrumented_scheduler_module.AsyncScheduler,
+        "schedule",
+        MagicMock(return_value=output),
+    )
+    monkeypatch.setattr(
+        instrumented_scheduler_module.time, "monotonic", MagicMock(return_value=42.0)
+    )
+
+    assert InstrumentedScheduler._bench_measure_resident_batch(stub) is output
+
+    stub._bench_cleanup_requests.assert_not_called()
+    assert stub._bench_current_point is point
+    assert stub._bench_decode_stage is _DecodeStage.MEASURING
+    assert list(stub._schedule_times) == [42.0]
+
+
+def test_resident_partial_mismatch_aborts_attention_dp(monkeypatch):
     point = BenchmarkPoint(
         point_type="decode", benchmark_id=8, total_kv_read_tokens=128, batch_size=2
     )
@@ -3640,6 +3702,7 @@ def test_resident_measurement_partial_mismatch_aborts_before_dispatch(monkeypatc
     stub._bench_phase = _BenchPhase.DECODE_SWEEP
     stub._bench_current_point = point
     stub._bench_decode_stage = _DecodeStage.RESIDENT
+    stub._bench_synchronizer = object()
     stub._bench_abort = MagicMock()
     output = SimpleNamespace(total_num_scheduled_tokens=1)
     monkeypatch.setattr(

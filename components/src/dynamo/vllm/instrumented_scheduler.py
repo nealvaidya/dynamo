@@ -3638,21 +3638,12 @@ class InstrumentedScheduler(AsyncScheduler):
             pass  # fall through to inject next point
 
         elif self._bench_active_req_ids:
-            if not self._bench_current_fpms:
-                if not self._bench_point_result_timed_out():
-                    return None
-                point = self._bench_current_point
-                if point is not None:
-                    logger.warning(
-                        "Skipping benchmark decode point after its measurement "
-                        "timed out: %s",
-                        point,
-                    )
-                    self._bench_skip_point(point, "decode_measurement_timeout")
-                    self._bench_current_point = None
-                    self._bench_point_deadline = 0.0
-            else:
-                self._bench_save_current_point()
+            if (
+                not self._bench_current_fpms
+                and not self._bench_point_result_timed_out()
+            ):
+                return None
+            self._bench_save_current_point()
             self._bench_cleanup_requests()
             if self._bench_transition_to_timeout_done():
                 return None
@@ -3718,26 +3709,33 @@ class InstrumentedScheduler(AsyncScheduler):
         point = self._bench_current_point
         self._bench_decode_stage = _DecodeStage.MEASURING
         output = super().schedule(throttle_prefills=True)
-        if point is None or output.total_num_scheduled_tokens != point.batch_size:
-            expected_tokens = point.batch_size if point is not None else 0
-            if (
-                output.total_num_scheduled_tokens > 0
-                or self._bench_synchronizer is not None
-            ):
+        if point is None:
+            raise RuntimeError("resident benchmark decode has no current point")
+        if output.total_num_scheduled_tokens != point.batch_size:
+            if self._bench_synchronizer is not None:
                 raise RuntimeError(
                     "resident benchmark decode scheduled "
-                    f"{output.total_num_scheduled_tokens} of {expected_tokens} requests"
+                    f"{output.total_num_scheduled_tokens} of {point.batch_size} requests"
                 )
+            if output.total_num_scheduled_tokens > 0:
+                logger.warning(
+                    "Deferring benchmark decode point skip until the partial "
+                    "resident batch completes: scheduled %d of %d requests: %s",
+                    output.total_num_scheduled_tokens,
+                    point.batch_size,
+                    point,
+                )
+                self._schedule_times.append(time.monotonic())
+                return output
             logger.warning(
                 "Skipping benchmark decode point after the resident batch "
                 "scheduled %d of %d requests: %s",
                 output.total_num_scheduled_tokens,
-                expected_tokens,
+                point.batch_size,
                 point,
             )
             self._bench_cleanup_requests()
-            if point is not None:
-                self._bench_skip_point(point, "decode_measurement_failed")
+            self._bench_skip_point(point, "decode_measurement_failed")
             self._bench_current_point = None
             self._bench_drain_pending = True
             return output
@@ -3791,11 +3789,24 @@ class InstrumentedScheduler(AsyncScheduler):
             for result in rank_results:
                 dp_rank = result["dp_rank"]
                 fpms = result.get("fpms")
-                if not isinstance(fpms, list) or len(fpms) != 1:
+                if not isinstance(fpms, list):
+                    raise TypeError(
+                        "each self-benchmark point must produce exactly one FPM: "
+                        f"benchmark_id={point.benchmark_id} rank={dp_rank} "
+                        "count=invalid"
+                    )
+                if not fpms:
+                    if validation_failure is None:
+                        validation_failure = (
+                            dp_rank,
+                            f"{point.point_type}_measurement_timeout",
+                        )
+                    continue
+                if len(fpms) != 1:
                     raise RuntimeError(
                         "each self-benchmark point must produce exactly one FPM: "
                         f"benchmark_id={point.benchmark_id} rank={dp_rank} "
-                        f"count={len(fpms) if isinstance(fpms, list) else 'invalid'}"
+                        f"count={len(fpms)}"
                     )
                 fpm = fpms[0]
                 if fpm.get("counter_id") != point.benchmark_id:
