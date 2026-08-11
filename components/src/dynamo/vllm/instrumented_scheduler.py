@@ -3720,7 +3720,10 @@ class InstrumentedScheduler(AsyncScheduler):
         output = super().schedule(throttle_prefills=True)
         if point is None or output.total_num_scheduled_tokens != point.batch_size:
             expected_tokens = point.batch_size if point is not None else 0
-            if output.total_num_scheduled_tokens > 0:
+            if (
+                output.total_num_scheduled_tokens > 0
+                or self._bench_synchronizer is not None
+            ):
                 raise RuntimeError(
                     "resident benchmark decode scheduled "
                     f"{output.total_num_scheduled_tokens} of {expected_tokens} requests"
