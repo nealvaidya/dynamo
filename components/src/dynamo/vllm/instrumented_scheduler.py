@@ -3700,11 +3700,24 @@ class InstrumentedScheduler(AsyncScheduler):
         self._bench_decode_stage = _DecodeStage.MEASURING
         output = super().schedule(throttle_prefills=True)
         if point is None or output.total_num_scheduled_tokens != point.batch_size:
+            expected_tokens = point.batch_size if point is not None else 0
+            if output.total_num_scheduled_tokens > 0:
+                error = RuntimeError(
+                    "resident benchmark decode scheduled "
+                    f"{output.total_num_scheduled_tokens} of {expected_tokens} requests"
+                )
+                logger.error(
+                    "Aborting benchmark before dispatching a partial resident "
+                    "decode batch: %s",
+                    point,
+                )
+                self._bench_abort(error)
+                raise error
             logger.warning(
                 "Skipping benchmark decode point after the resident batch "
                 "scheduled %d of %d requests: %s",
                 output.total_num_scheduled_tokens,
-                point.batch_size if point is not None else 0,
+                expected_tokens,
                 point,
             )
             self._bench_cleanup_requests()

@@ -3575,7 +3575,7 @@ def test_resident_measurement_uses_parent_scheduler_after_sync(monkeypatch):
     assert list(stub._schedule_times) == [42.0]
 
 
-def test_resident_measurement_mismatch_skips_point(monkeypatch):
+def test_resident_measurement_empty_mismatch_skips_point(monkeypatch):
     point = BenchmarkPoint(
         point_type="decode", benchmark_id=8, total_kv_read_tokens=128, batch_size=2
     )
@@ -3585,7 +3585,7 @@ def test_resident_measurement_mismatch_skips_point(monkeypatch):
     stub._bench_cleanup_requests = MagicMock()
     stub._bench_skip_point = MagicMock()
     stub._bench_drain_pending = False
-    output = SimpleNamespace(total_num_scheduled_tokens=1)
+    output = SimpleNamespace(total_num_scheduled_tokens=0)
     monkeypatch.setattr(
         instrumented_scheduler_module.AsyncScheduler,
         "schedule",
@@ -3597,3 +3597,24 @@ def test_resident_measurement_mismatch_skips_point(monkeypatch):
     stub._bench_skip_point.assert_called_once_with(point, "decode_measurement_failed")
     assert stub._bench_current_point is None
     assert stub._bench_drain_pending is True
+
+
+def test_resident_measurement_partial_mismatch_aborts_before_dispatch(monkeypatch):
+    point = BenchmarkPoint(
+        point_type="decode", benchmark_id=8, total_kv_read_tokens=128, batch_size=2
+    )
+    stub = InstrumentedScheduler.__new__(InstrumentedScheduler)
+    stub._bench_current_point = point
+    stub._bench_decode_stage = _DecodeStage.RESIDENT
+    stub._bench_abort = MagicMock()
+    output = SimpleNamespace(total_num_scheduled_tokens=1)
+    monkeypatch.setattr(
+        instrumented_scheduler_module.AsyncScheduler,
+        "schedule",
+        MagicMock(return_value=output),
+    )
+
+    with pytest.raises(RuntimeError, match="scheduled 1 of 2 requests") as exc_info:
+        InstrumentedScheduler._bench_measure_resident_batch(stub)
+
+    stub._bench_abort.assert_called_once_with(exc_info.value)
