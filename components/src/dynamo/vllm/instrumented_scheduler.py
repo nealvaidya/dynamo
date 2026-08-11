@@ -120,6 +120,8 @@ from dynamo.vllm.benchmark_points import (
     PrefillPointCandidate,
 )
 
+Scheduler = AsyncScheduler.__bases__[0]
+
 if TYPE_CHECKING:
     from vllm.config import VllmConfig
     from vllm.v1.kv_cache_interface import KVCacheConfig
@@ -1603,7 +1605,14 @@ class InstrumentedScheduler(AsyncScheduler):
                     )
                 # This retention frame will never produce sampled output, so
                 # bypass AsyncScheduler's output-placeholder accounting.
-                super(AsyncScheduler, self)._update_after_schedule(empty)
+                # Name the base explicitly so MRO changes cannot silently
+                # route this through async placeholder accounting.
+                if Scheduler.__name__ != "Scheduler":
+                    raise RuntimeError(
+                        "AsyncScheduler must directly inherit Scheduler for "
+                        "retention-frame handling"
+                    )
+                Scheduler._update_after_schedule(self, empty)
                 return empty
 
         return self._schedule_and_record_time(throttle_prefills)
@@ -3629,12 +3638,21 @@ class InstrumentedScheduler(AsyncScheduler):
             pass  # fall through to inject next point
 
         elif self._bench_active_req_ids:
-            if (
-                not self._bench_current_fpms
-                and not self._bench_point_result_timed_out()
-            ):
-                return None
-            self._bench_save_current_point()
+            if not self._bench_current_fpms:
+                if not self._bench_point_result_timed_out():
+                    return None
+                point = self._bench_current_point
+                if point is not None:
+                    logger.warning(
+                        "Skipping benchmark decode point after its measurement "
+                        "timed out: %s",
+                        point,
+                    )
+                    self._bench_skip_point(point, "decode_measurement_timeout")
+                    self._bench_current_point = None
+                    self._bench_point_deadline = 0.0
+            else:
+                self._bench_save_current_point()
             self._bench_cleanup_requests()
             if self._bench_transition_to_timeout_done():
                 return None
@@ -3658,8 +3676,9 @@ class InstrumentedScheduler(AsyncScheduler):
         # entries are clamped; the point is then recorded at the coordinate
         # the steady step actually measures.
         injected_lengths = [max(1, ctx - 1) for ctx in context_lengths]
-        admission_kv_tokens = sum(injected_lengths)
-        steady_kv_tokens = admission_kv_tokens + point.batch_size
+        steady_kv_tokens = self._bench_decode_steady_kv_tokens(
+            point.batch_size, point.total_kv_read_tokens
+        )
         if steady_kv_tokens != point.total_kv_read_tokens:
             point = replace(
                 point,

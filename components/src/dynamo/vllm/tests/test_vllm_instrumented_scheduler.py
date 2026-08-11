@@ -1288,7 +1288,7 @@ def test_decode_sweep_empty_frame_attaches_kv_connector_metadata(monkeypatch):
     connector.build_connector_meta = MagicMock(return_value=sentinel)
     base_update = MagicMock()
     monkeypatch.setattr(
-        instrumented_scheduler_module.AsyncScheduler.__mro__[1],
+        instrumented_scheduler_module.Scheduler,
         "_update_after_schedule",
         base_update,
     )
@@ -1299,7 +1299,7 @@ def test_decode_sweep_empty_frame_attaches_kv_connector_metadata(monkeypatch):
     assert out.kv_connector_metadata is sentinel
     assert out.num_scheduled_tokens == {"__bench_0": 0}
     connector.build_connector_meta.assert_called_once_with(out)
-    base_update.assert_called_once_with(out)
+    base_update.assert_called_once_with(stub, out)
     stub._update_after_schedule.assert_not_called()
     # ec_connector is None on the stub; the ec field stays untouched.
     assert out.ec_connector_metadata is None
@@ -1313,7 +1313,7 @@ def test_decode_sweep_empty_frame_attaches_ec_connector_metadata_when_set(monkey
     ec_connector = MagicMock()
     ec_connector.build_connector_meta = MagicMock(return_value=ec_meta)
     monkeypatch.setattr(
-        instrumented_scheduler_module.AsyncScheduler.__mro__[1],
+        instrumented_scheduler_module.Scheduler,
         "_update_after_schedule",
         MagicMock(),
     )
@@ -1333,7 +1333,7 @@ def test_decode_sweep_empty_frame_no_connector_leaves_metadata_none(monkeypatch)
     metadata fields still None.
     """
     monkeypatch.setattr(
-        instrumented_scheduler_module.AsyncScheduler.__mro__[1],
+        instrumented_scheduler_module.Scheduler,
         "_update_after_schedule",
         MagicMock(),
     )
@@ -3272,14 +3272,22 @@ def test_decode_point_with_no_fpm_stops_waiting_at_deadline(monkeypatch):
     stub._bench_current_point = point
     stub._bench_current_fpms = []
     stub._bench_point_deadline = 1.0
-    stub._bench_save_current_point = MagicMock(
-        side_effect=RuntimeError("exactly one FPM")
-    )
+    stub._bench_skipped_points = []
+    stub._bench_save_current_point = MagicMock()
+    stub._bench_cleanup_requests = MagicMock()
+    stub._bench_transition_to_timeout_done = MagicMock(return_value=False)
     monkeypatch.setattr(instrumented_scheduler_module.time, "monotonic", lambda: 2.0)
 
-    with pytest.raises(RuntimeError, match="exactly one FPM"):
-        InstrumentedScheduler._bench_step_decode(stub)
-    stub._bench_save_current_point.assert_called_once_with()
+    assert InstrumentedScheduler._bench_step_decode(stub) is None
+
+    stub._bench_save_current_point.assert_not_called()
+    stub._bench_cleanup_requests.assert_called_once_with()
+    assert stub._bench_current_point is None
+    assert stub._bench_point_deadline == 0.0
+    assert stub._bench_drain_pending is True
+    assert stub._bench_skipped_points == [
+        SkippedBenchmarkPoint(point=point, reason="decode_measurement_timeout")
+    ]
 
 
 def test_prefill_point_with_measured_batch_size_mismatch_is_skipped():
